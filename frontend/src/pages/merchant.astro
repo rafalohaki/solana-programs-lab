@@ -1,0 +1,397 @@
+---
+import Layout from "../layouts/Layout.astro";
+import MerchantForm from "../components/MerchantForm.svelte";
+import InvoicesPanel from "../components/InvoicesPanel.svelte";
+import EmbedPanel from "../components/EmbedPanel.svelte";
+import { CLUSTER, shortAddr } from "../lib/chain.js";
+import { fetchPlansCached } from "../lib/plansCache.js";
+
+// SSR HTML embeds a best-effort live plan list (60 s server cache behind it):
+// no browser/edge HTML caching.
+Astro.response.headers.set("Cache-Control", "no-store");
+
+let embedPlans: Array<{ address: string; label: string }> = [];
+try {
+  const found = await fetchPlansCached();
+  embedPlans = found.map((p) => ({
+    address: p.address.toBase58(),
+    label: `Plan #${p.planId.toString()} · ${shortAddr(p.address, 4)}…`,
+  }));
+} catch {
+  // Client island re-renders from the wallet anyway; SSR list is best-effort.
+}
+---
+
+<Layout title="Merchant — create a plan" description="Create an on-chain subscription plan: mint, amount, period.">
+<style>
+  /* Merchant Void skin (page scope; cards use the global .glass / .card-hover). */
+  .mstat-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .mtag {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: rgba(225, 225, 240, 0.45);
+  }
+</style>
+  <section class="mx-auto max-w-7xl pt-12 pb-12">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="font-mono text-[11px] tracking-wider text-white/40 uppercase" data-i18n="merchant.eyebrow">for merchants</p>
+      <!-- Authority chips like the template header: real cluster constant + live-measured RPC latency (no mocked ms). -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="mtag px-2.5 py-1 uppercase">{CLUSTER} · OnchainSUB</span>
+        <span class="flex items-center gap-1.5 font-mono text-[11px] tracking-[0.06em] text-white/45 uppercase">
+          <span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[#14f195]" aria-hidden="true"></span>
+          <span id="m2-rpc">RPC · —</span>
+        </span>
+      </div>
+    </div>
+    <h1 class="font-display mt-2 text-3xl font-bold tracking-tight sm:text-4xl" data-i18n="merchant.h1">Create a plan</h1>
+    <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/55 sm:text-[15px]">
+      <span data-i18n="merchant.leadA">Start getting paid on-chain in minutes. A plan is a</span>
+      <span
+        class="cursor-help"
+        data-i18n-title="m2.pdaTitle"
+        title="Program Derived Address — an account address derived from seeds ([plan, merchant, plan_id]); no private key, the program signs via CPI."
+      >PDA</span>
+      <span class="font-mono text-xs">["plan", merchant, plan_id]</span>
+      <span data-i18n="merchant.leadB">holding the mint, amount and period. Terms are immutable: a new price is a new</span>
+      <span class="font-mono text-xs">plan_id</span><span data-i18n="merchant.leadC">. You sign with your wallet; subscriber allowance is always exactly one period.</span>
+    </p>
+
+    <div class="mt-6 grid grid-cols-1 gap-3 [&>*]:min-w-0 min-[440px]:grid-cols-2 lg:grid-cols-4" id="m2stats">
+      <div class="glass card-hover flex flex-col px-5 py-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-[11px] font-medium tracking-[0.06em] text-[#cec2d8] uppercase" data-i18n="m2.stats.plans">My plans</p>
+          <span class="msym text-[18px] text-[#d8b9ff]" aria-hidden="true">account_tree</span>
+        </div>
+        <p class="mstat-num mt-2 text-[22px] leading-7 font-semibold tracking-tight text-[#e1e1f0]" id="m2-plans">—</p>
+        <p class="mt-1 font-mono text-[11px] break-words text-white/35" data-i18n="m2.stats.plansHint">fetchPlans · filtered by wallet</p>
+      </div>
+      <div class="glass card-hover flex flex-col px-5 py-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-[11px] font-medium tracking-[0.06em] text-[#cec2d8] uppercase" data-i18n="m2.stats.invoices">My invoices</p>
+          <span class="msym text-[18px] text-[#00f0ff]" aria-hidden="true">pending_actions</span>
+        </div>
+        <p class="mstat-num mt-2 text-[22px] leading-7 font-semibold tracking-tight text-[#e1e1f0]" id="m2-invoices">—</p>
+        <p class="mt-1 font-mono text-[11px] break-words text-white/35" data-i18n="m2.stats.invoicesHint">fetchInvoicesOfMerchant · count</p>
+      </div>
+      <div class="glass card-hover flex flex-col px-5 py-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-[11px] font-medium tracking-[0.06em] text-[#cec2d8] uppercase" data-i18n="m2.stats.domains">Domains</p>
+          <span class="msym text-[18px] text-white/45" aria-hidden="true">verified</span>
+        </div>
+        <p class="mstat-num mt-2 text-[22px] leading-7 font-semibold tracking-tight text-[#e1e1f0]" id="m2-domains">—</p>
+        <p class="mt-1 font-mono text-[11px] break-words text-white/35" data-i18n="m2.stats.domainsHint">GET /api/widget/sites?merchant</p>
+      </div>
+      <div class="glass card-hover flex flex-col px-5 py-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-[11px] font-medium tracking-[0.06em] text-[#cec2d8] uppercase" data-i18n="m2.stats.perPeriod">Est. per period</p>
+          <span class="msym text-[18px] text-[#14f195]" aria-hidden="true">electric_bolt</span>
+        </div>
+        <p class="mstat-num mt-2 text-[22px] leading-7 font-semibold tracking-tight text-[#e1e1f0]" id="m2-perperiod">—</p>
+        <p class="mt-1 font-mono text-[11px] break-words text-white/35" data-i18n="m2.stats.perPeriodHint">sum of plan amounts × 1 period</p>
+      </div>
+    </div>
+    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <p class="font-mono text-[11px] text-white/40">
+        <span id="m2-st-connect" data-i18n="m2.stats.connect">connect wallet</span>
+        <span id="m2-st-loading" class="hidden" data-i18n="m2.stats.loading">loading…</span>
+        <span id="m2-st-live" class="hidden text-[#14f195]">● <span data-i18n="m2.stats.live">live</span></span>
+      </p>
+      <!-- Passive merchant-authority chip (template rich:23-35); display toggled from JS only. -->
+      <span
+        id="m2-authority"
+        class="items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1"
+        style="display:none"
+      >
+        <span class="msym text-[14px] text-[#d8b9ff]" aria-hidden="true">fingerprint</span>
+        <span class="font-mono text-[10px] tracking-[0.06em] text-white/45 uppercase" data-i18n="m2.stats.authority">Merchant authority</span>
+        <span id="m2-authority-addr" class="font-mono text-[11px] text-[#14f195]"></span>
+      </span>
+      <button
+        type="button"
+        id="m2-refresh"
+        class="cursor-pointer font-mono text-[11px] text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]"
+        data-i18n="m2.stats.refresh"
+      >
+        Refresh stats
+      </button>
+    </div>
+    <p class="mt-2 max-w-3xl text-xs leading-relaxed text-white/40" data-i18n="m2.stats.note">
+      Live: counts come from RPC + the widget API once the wallet connects. Per-period is the raw sum of your plan
+      amounts × 1 — not a forecast.
+    </p>
+
+    <section class="mt-10" data-i18n-aria="merchant.mod1Aria" aria-label="Module 01: plan creator">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p class="tag-pill tag-pill--grape">
+            <span data-i18n="m2.mod.kicker">Module</span>&nbsp;01
+          </p>
+          <h2 class="font-display mt-2 text-xl font-bold tracking-tight text-[#e1e1f0]" data-i18n="m2.mod.creator">Plan creator</h2>
+          <p class="mt-1 max-w-2xl text-sm text-white/55" data-i18n="m2.mod.creatorLead">
+            Set the mint, amount and billing period. The plan PDA is derived deterministically.
+          </p>
+        </div>
+        <p class="mtag px-3 py-1.5 uppercase" data-i18n="m2.mod.tagCreate">
+          ATOMIC PROGRAM INSTRUCTION: create_plan
+        </p>
+      </div>
+      <div class="mt-4">
+        <MerchantForm client:load />
+      </div>
+    </section>
+
+    <section class="mt-10" data-i18n-aria="merchant.mod2Aria" aria-label="Module 02: batch charging and invoicing">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p class="tag-pill">
+            <span data-i18n="m2.mod.kicker">Module</span>&nbsp;02
+          </p>
+          <h2 class="font-display mt-2 text-xl font-bold tracking-tight text-[#e1e1f0]" data-i18n="m2.mod.batch">Batch charging & invoicing</h2>
+          <p class="mt-1 max-w-2xl text-sm text-white/55" data-i18n="m2.mod.batchLead">
+            Issue invoices against active subscriptions, then charge up to 8 per transaction.
+          </p>
+        </div>
+        <p class="mtag px-3 py-1.5 uppercase" data-i18n="m2.mod.tagBatch">
+          ATOMIC PROGRAM INSTRUCTION: charge_invoice · batch (max 8)
+        </p>
+      </div>
+      <div class="mt-4">
+        <!-- Below-the-fold module: hydrate on idle instead of eager client:load. -->
+        <InvoicesPanel client:idle />
+      </div>
+    </section>
+
+    <section class="mt-10" data-i18n-aria="merchant.mod3Aria" aria-label="Module 03: widget generator">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p class="tag-pill tag-pill--cyan">
+            <span data-i18n="m2.mod.kicker">Module</span>&nbsp;03
+          </p>
+          <h2 class="font-display mt-2 text-xl font-bold tracking-tight text-[#e1e1f0]" data-i18n="m2.mod.widget">Widget generator & origin binding</h2>
+          <p class="mt-1 max-w-2xl text-sm text-white/55" data-i18n="m2.mod.widgetLead">
+            Bind a domain to a plan and paste the snippet. Foreign origins end in 403.
+          </p>
+        </div>
+        <p class="mtag px-3 py-1.5 uppercase" data-i18n="m2.mod.tagWidget">
+          OFF-CHAIN API: domain binding · Ed25519 wallet signature on save
+        </p>
+      </div>
+      <div class="mt-4">
+        <!-- Below-the-fold module; props stay plain serializable data. -->
+        <EmbedPanel client:idle plans={embedPlans} />
+      </div>
+    </section>
+
+    <div class="glass mt-10 p-5 text-sm leading-relaxed text-white/55">
+      <p class="font-semibold text-white/85" data-i18n="merchant.afterTitle">After creating</p>
+      <ol class="mt-2 list-decimal space-y-1 pl-5">
+        <li><span data-i18n="merchant.after1a">Your plan appears on the</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/#plany" data-i18n="merchant.after1link">plans list</a> <span data-i18n="merchant.after1b">once the transaction confirms.</span></li>
+        <li data-i18n="merchant.after2">Hit the bolt button on the plan card to copy a Blink URL for sharing.</li>
+        <li><span data-i18n="merchant.after3a">Collect payments with “Charge now” in</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/manage" data-i18n="merchant.after3link">My subscriptions</a> <span data-i18n="merchant.after3b">once the period elapses.</span></li>
+        <li><span data-i18n="merchant.after4a">Sell on your own site: bind a domain to a plan below, paste the snippet, and see live use-cases on</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/examples" data-i18n="merchant.after4link">examples</a> <span data-i18n="merchant.after4b">— a stolen snippet stops at a 403 page.</span></li>
+      </ol>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import "../lib/i18n-merch2.js";
+  import { connection, fetchInvoicesOfMerchant, fetchPlans, shortAddr } from "../lib/chain.js";
+  import { PublicKey } from "@solana/web3.js";
+  import { DEVNET_USDC_MINT } from "../lib/mints.js";
+  import { DEMO_PLANS, DEMO_RECEIPTS, DEMO_STATS, isDemoMode } from "../lib/demo.js";
+
+  interface ProviderHandle {
+    publicKey?: { toBase58(): string } | null;
+    on?: (event: string, listener: () => void) => void;
+  }
+
+  function providerHandles(): ProviderHandle[] {
+    const w = window as unknown as { solana?: ProviderHandle; solflare?: ProviderHandle };
+    const out: ProviderHandle[] = [];
+    if (w.solana !== undefined) out.push(w.solana);
+    if (w.solflare !== undefined) out.push(w.solflare);
+    return out;
+  }
+
+  function merchantKey(): string | null {
+    for (const p of providerHandles()) {
+      try {
+        const key = p.publicKey?.toBase58();
+        if (key !== undefined) return key;
+      } catch {
+        // Provider not ready — treat as disconnected.
+      }
+    }
+    return null;
+  }
+
+  function el(id: string): HTMLElement | null {
+    return document.getElementById(id);
+  }
+
+  function setText(id: string, value: string, title?: string): void {
+    const node = el(id);
+    if (node === null) return;
+    node.textContent = value;
+    if (title !== undefined) node.title = title;
+    else node.removeAttribute("title");
+  }
+
+  function setState(which: "connect" | "loading" | "live"): void {
+    for (const [id, name] of [["m2-st-connect", "connect"], ["m2-st-loading", "loading"], ["m2-st-live", "live"]] as const) {
+      el(id)?.classList.toggle("hidden", name !== which);
+    }
+  }
+
+  // Passive authority chip: show only when a REAL connected wallet address
+  // exists (never in demo mode — fixtures carry no merchant authority).
+  // display is driven via style so no display utility class can fight it.
+  function setAuthority(addr: string | null): void {
+    const chip = el("m2-authority");
+    const addrNode = el("m2-authority-addr");
+    if (chip === null) return;
+    chip.style.display = addr === null ? "none" : "inline-flex";
+    if (addrNode !== null) addrNode.textContent = addr ?? "";
+  }
+
+  // Same formatter for demo + live: USDC micro-units → "3,450.00 USDC".
+  function fmtUsdcFromMicro(raw: bigint): string {
+    const neg = raw < 0n;
+    const abs = neg ? -raw : raw;
+    const whole = (abs / 1_000_000n).toLocaleString("en-US");
+    const frac = (abs % 1_000_000n).toString().padStart(6, "0").slice(0, 2);
+    return `${neg ? "-" : ""}${whole}.${frac} USDC`;
+  }
+
+  function renderDemo(): void {
+    setText("m2-plans", DEMO_STATS.livePlans.toString(), "demo fixture: DEMO_STATS.livePlans");
+    setText("m2-invoices", DEMO_RECEIPTS.length.toString(), "demo fixtures: DEMO_RECEIPTS count");
+    setText("m2-domains", DEMO_PLANS.length.toString(), "demo fixtures: one domain per DEMO_PLANS entry");
+    setText("m2-perperiod", fmtUsdcFromMicro(BigInt(DEMO_STATS.mrrUsdc) * 1_000_000n), "demo fixture: DEMO_STATS.mrrUsdc");
+    setAuthority(null);
+    setState("live");
+  }
+
+  function renderEmpty(): void {
+    for (const id of ["m2-plans", "m2-invoices", "m2-domains", "m2-perperiod"]) setText(id, "—");
+    setAuthority(null);
+    setState("connect");
+  }
+
+  // Header RPC chip: one real timed getEpochInfo roundtrip (public method,
+  // no wallet needed). Honest "—" when the RPC is unreachable; "demo" label
+  // in demo mode, where no RPC call happens.
+  async function measureRpc(): Promise<void> {
+    const node = el("m2-rpc");
+    if (node === null) return;
+    if (isDemoMode()) {
+      node.textContent = "demo · fixtures";
+      return;
+    }
+    try {
+      const started = performance.now();
+      await connection().getEpochInfo();
+      const ms = Math.max(1, Math.round(performance.now() - started));
+      node.textContent = `RPC · ${ms} ms`;
+    } catch {
+      node.textContent = "RPC · —";
+    }
+  }
+
+  let lastKey: string | null | undefined = undefined;
+  let inFlight = 0;
+
+  async function refresh(force = false): Promise<void> {
+    if (isDemoMode()) {
+      renderDemo();
+      return;
+    }
+    const key = merchantKey();
+    if (key === null) {
+      lastKey = null;
+      renderEmpty();
+      return;
+    }
+    if (key === lastKey && !force) return;
+    lastKey = key;
+    const ticket = ++inFlight;
+    setState("loading");
+    try {
+      const merchant = new PublicKey(key);
+      const conn = connection();
+      const [plans, invoices] = await Promise.all([fetchPlans(conn), fetchInvoicesOfMerchant(conn, merchant)]);
+      if (ticket !== inFlight || merchantKey() !== key) return; // superseded
+      const mine = plans.filter((p) => p.merchant.toBase58() === key);
+      setAuthority(shortAddr(new PublicKey(key), 4));
+      setText("m2-plans", mine.length.toString(), `${mine.length} on-chain plans for this merchant`);
+      setText("m2-invoices", invoices.length.toString(), `${invoices.length} on-chain invoices for this merchant`);
+      try {
+        const res = await fetch(`/api/widget/sites?merchant=${encodeURIComponent(key)}`);
+        const json = (await res.json()) as { sites?: Array<unknown> };
+        if (ticket !== inFlight || merchantKey() !== key) return;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setText("m2-domains", (json.sites ?? []).length.toString());
+      } catch {
+        if (ticket !== inFlight || merchantKey() !== key) return;
+        setText("m2-domains", "—", "widget API unreachable");
+      }
+      if (mine.length === 0) {
+        setText("m2-perperiod", "—");
+      } else {
+        const mints = new Set(mine.map((p) => p.mint.toBase58()));
+        const sum = mine.reduce((acc, p) => acc + p.amount, 0n);
+        if (mints.size === 1 && mine[0]?.mint.toBase58() === DEVNET_USDC_MINT) {
+          setText("m2-perperiod", fmtUsdcFromMicro(sum), `Σ ${mine.length} USDC plan amounts × 1 period (raw ${sum.toString()})`);
+        } else if (mints.size === 1) {
+          setText("m2-perperiod", `${sum.toLocaleString("en-US")} units`, `Σ ${mine.length} plan amounts × 1 period (raw, single mint)`);
+        } else {
+          setText("m2-perperiod", `${sum.toLocaleString("en-US")} units`, `${mine.length} plans · mixed mints — raw sum, not convertible`);
+        }
+      }
+      setState("live");
+    } catch {
+      if (ticket !== inFlight || merchantKey() !== key) return;
+      for (const id of ["m2-plans", "m2-invoices", "m2-domains", "m2-perperiod"]) setText(id, "—", "RPC unreachable");
+      setAuthority(null);
+      setState("connect");
+    }
+  }
+
+  function watch(): void {
+    void refresh();
+    void measureRpc();
+    for (const p of providerHandles()) {
+      try {
+        p.on?.("connect", () => void refresh(true));
+        p.on?.("disconnect", () => void refresh(true));
+        p.on?.("accountChanged", () => void refresh(true));
+      } catch {
+        // Provider without event emitter — the poll below covers it.
+      }
+    }
+  }
+
+  el("m2-refresh")?.addEventListener("click", () => {
+    void refresh(true);
+    void measureRpc();
+  });
+  window.addEventListener("focus", () => void refresh());
+  window.addEventListener("solhack:merchant-changed", () => void refresh(true));
+  window.setInterval(() => {
+    if (isDemoMode()) {
+      void refresh();
+      return;
+    }
+    if (merchantKey() !== lastKey) void refresh();
+  }, 2000);
+  watch();
+</script>

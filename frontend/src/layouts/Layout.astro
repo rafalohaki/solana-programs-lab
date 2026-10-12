@@ -1,0 +1,376 @@
+---
+import { ClientRouter } from "astro:transitions";
+import { CLUSTER, PROGRAM_ID, shortAddr } from "../lib/chain.js";
+import { SITE_URL } from "../lib/blinks.js";
+import AdminPanel from "../components/AdminPanel.svelte";
+import DemoBanner from "../components/DemoBanner.svelte";
+import Toasts from "../components/Toasts.svelte";
+import WalletButton from "../components/WalletButton.svelte";
+import LangToggle from "../components/LangToggle.svelte";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "On-chain subscriptions on Solana — plans, delegates and Blinks." } = Astro.props;
+const path = Astro.url.pathname;
+
+// OG/Twitter scrapers require absolute URLs. SITE_URL is the canonical
+// build-time origin (PUBLIC_SITE_URL) — Astro.url.origin would bake the dev
+// :4321 origin into prerendered pages (see lib/blinks.ts).
+const ogImage = `${SITE_URL}/og-image.png`;
+const ogUrl = `${SITE_URL}${path}`;
+// Cluster-aware Explorer deep link to the program (footer + nav tab).
+const explorerHref =
+  CLUSTER === "mainnet-beta"
+    ? `https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}`
+    : `https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=${CLUSTER}`;
+interface Tab {
+  href: string;
+  key: string;
+  label: string;
+  /** Material Symbols glyph — rendered by the mobile tab bar only. */
+  icon?: string;
+  /** Short label for the mobile tab bar, where 5 tabs share ~390px. */
+  shortLabel?: string;
+  /** i18n key of shortLabel (mobile bar only). */
+  shortKey?: string;
+  match: (p: string) => boolean;
+  external?: boolean;
+}
+const tabs: Tab[] = [
+  { href: "/#plany", key: "nav.plans", label: "Plans", icon: "subscriptions", match: (p: string) => p === "/" },
+  { href: "/merchant", key: "nav.merchant", label: "Merchant", icon: "storefront", match: (p: string) => p.startsWith("/merchant") },
+  { href: "/manage", key: "nav.manage", label: "My subscriptions", shortLabel: "My subs", shortKey: "nav.manageShort", icon: "tune", match: (p: string) => p.startsWith("/manage") },
+  { href: "/blink", key: "nav.blinks", label: "Blinks", icon: "bolt", match: (p: string) => p.startsWith("/blink") },
+  { href: "/examples", key: "nav.examples", label: "Examples", icon: "smart_display", match: (p: string) => p.startsWith("/examples") || p.startsWith("/pay") },
+  // External deep link — desktop pill bar and footer only, never the mobile tab bar.
+  { href: explorerHref, key: "nav.explorer", label: "Explorer", match: () => false, external: true },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    {/* Client-side router: same-document navigations keep Svelte island state
+         (wallet connection survives page changes — no reconnect flash, no
+         re-fetch storm). Islands without transition:persist remount as before. */}
+    <ClientRouter />
+    <title>{title} — OnchainSUB</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#11131d" />
+    <!-- Canonical: absolute per-page URL (same origin logic as og:url below). -->
+    <link rel="canonical" href={ogUrl} />
+    <!-- Favicon: SVG-first; browsers without SVG favicon support fall back to the 32x32 hint. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" sizes="32x32" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <meta property="og:title" content={`${title} — OnchainSUB`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <!-- Absolute URLs: scrapers (FB/Twitter/Slack) ignore relative og: values. -->
+    <meta property="og:url" content={ogUrl} />
+    <meta property="og:image" content={ogImage} />
+    <!-- og-image.png is 1200x630 (summary_large_image size). X/FB prefer PNG. -->
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="OnchainSUB — on-chain subscriptions on Solana" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={`${title} — OnchainSUB`} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="OnchainSUB — on-chain subscriptions on Solana" />
+    <!-- Fonts are self-hosted from /fonts (see the @font-face block at the bottom
+         of this file): same files Google served, but no fonts.googleapis.com /
+         fonts.gstatic.com dependency, so the strict CSP stays 'self'-only and
+         no inline onload handler is needed. -->
+    <!-- Preload the icon font: @font-face lives at the end of <body>, so without
+         this the 320 KB symbols file is discovered late and the mobile tab bar
+         flashes ligature words (FOUT) on slow connections. -->
+    <link rel="preload" href="/fonts/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin />
+    {/* LCP elements render in these faces: early discovery cuts FCP/LCP
+         (latin first; latin-ext for PL diacritics follows on demand). */}
+    <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <script is:inline>
+      try {
+        document.documentElement.lang = localStorage.getItem("solhack-lang") === "pl" ? "pl" : "en";
+      } catch {
+        document.documentElement.lang = "en";
+      }
+    </script>
+  </head>
+  <!-- Body reserves room for the fixed mobile tab bar (h-16 + safe area) below lg. -->
+  <body class="bg-scene min-h-screen pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <!-- Skip-to-content: first tab stop, visible only on focus. -->
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-[#1d1f29] focus:px-4 focus:py-2 focus:text-sm focus:text-white focus:shadow-lg"
+      data-i18n="a11y.skipToContent"
+    >
+      Skip to content
+    </a>
+    <header class="sticky top-0 z-40 border-b border-white/[0.06] bg-[#11131d]/80 backdrop-blur-md">
+      <!-- Tighter gaps/padding below sm so brand + language + wallet fit 390px
+           on a single line (badge stays hidden until lg). -->
+      <nav
+        class="mx-auto flex h-14 max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-6 lg:px-8"
+        aria-label="Main"
+        data-i18n-aria="nav.main"
+      >
+        <!-- min-w-0 + truncate let the brand (never hidden) absorb extreme
+             narrowness instead of forcing horizontal page scroll at 320px. -->
+        <a href="/" class="font-display flex min-w-0 items-center gap-2 text-sm font-bold tracking-tight sm:gap-2.5 sm:text-[15px]">
+          <!-- Brand mark as inline SVG: centered by flexbox, immune to font-fallback
+               metrics of the U+25C8 text glyph (clipped/shifted on some platforms). -->
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+            style="background: linear-gradient(135deg, #9945FF, #14F195)"
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none">
+              <path d="M12 3.5 L20.5 12 L12 20.5 L3.5 12 Z" stroke="#fff" stroke-width="2.8" stroke-linejoin="round"></path>
+              <path d="M12 8.6 L15.4 12 L12 15.4 L8.6 12 Z" fill="#fff"></path>
+            </svg>
+          </span>
+          <span class="truncate">Subscriptions<span class="grad-text">.sol</span></span>
+        </a>
+        <div class="pillbar hidden items-center gap-1 p-1 text-sm text-white/65 lg:flex">
+          {tabs.map((t) => (
+            <a
+              class="rounded-full px-3 py-1.5 whitespace-nowrap hover:text-white"
+              href={t.href}
+              aria-current={t.match(path) ? "page" : undefined}
+              target={t.external ? "_blank" : undefined}
+              rel={t.external ? "noreferrer" : undefined}
+            >
+              {/* Full label on xl+; compact below (at 1024px a connected wallet
+                  leaves no room for "My subscriptions" on one line). data-i18n
+                  stays per-span: applyStaticLang replaces textContent. */}
+              <span class="hidden xl:inline" data-i18n={t.key}>{t.label}</span>
+              <span class="xl:hidden" data-i18n={t.shortKey ?? t.key}>{t.shortLabel ?? t.label}</span>
+            </a>
+          ))}
+        </div>
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {/* Wrapper owns visibility: .tag-pill sets display:inline-flex unlayered,
+              which beats Tailwind's `hidden` — never put display utilities on it. */}
+          <span class="hidden shrink-0 xl:block">
+            <span class="tag-pill tag-pill--cyan" data-i18n-title="nav.clusterTitle" title="Solana network">
+              <span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[#14f195]" aria-hidden="true"></span>
+              {CLUSTER}
+            </span>
+          </span>
+          {/* Hydration budget: the wallet button needs immediate JS (silent
+               onlyIfTrusted reconnect on first paint). The language toggle is
+               tiny but interactive from second zero — idle hydration loses the
+               race with early clicks AND e2e, so it loads eager too. */}
+          <LangToggle client:load />
+          <WalletButton client:load transition:persist="wallet-button" />
+        </div>
+      </nav>
+    </header>
+    <!-- Mobile bottom tab bar — mirrors the fixed bottom nav of the mobile stitch
+         references (.stitch-ref/extra/mobile-merchant-i-manage.html): fixed,
+         blurred surface, hairline top edge, upward shadow, safe-area padding.
+         Five even tabs, 64px row, ≥48px touch targets; active tab = emerald.
+         Explorer stays out (external link — desktop pill bar and footer). -->
+    <nav
+      class="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-[#11131d]/85 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.35)] backdrop-blur-xl lg:hidden"
+      aria-label="Sections"
+      data-i18n-aria="nav.mobile"
+    >
+      <div class="mx-auto flex h-16 max-w-7xl items-stretch justify-around">
+        {tabs.filter((t) => !t.external).map((t) => (
+          <a
+            class:list={[
+              "flex flex-1 flex-col items-center justify-center gap-1 px-1 transition-colors duration-100",
+              t.match(path) ? "text-[#14F195]" : "text-white/50 hover:text-white/80",
+            ]}
+            href={t.href}
+            aria-current={t.match(path) ? "page" : undefined}
+          >
+            {/* data-i18n sits on the label span only — applyStaticLang replaces
+                textContent, which would wipe the icon if put on the anchor. */}
+            <span class="msym text-[22px]" aria-hidden="true">{t.icon}</span>
+            <span
+              class="whitespace-nowrap font-mono text-[10px] tracking-[0.04em] uppercase"
+              data-i18n={t.shortKey ?? t.key}
+            >
+              {t.shortLabel ?? t.label}
+            </span>
+          </a>
+        ))}
+      </div>
+    </nav>
+    {/* Eager hydration (not idle): the exit button must work the moment the
+        SSR-painted banner is visible — an idle island invites
+        click-before-hydration races. Tiny component, ~zero budget cost. */}
+    <DemoBanner client:load demo={Astro.url.searchParams.get("demo") === "1"} />
+
+    <!-- Skip-link target: focusable so keyboard users actually land here. -->
+    <main id="main" tabindex="-1" class="mx-auto max-w-7xl px-4 outline-none sm:px-6 lg:px-8">
+      <slot />
+    </main>
+
+    <AdminPanel client:idle />
+    <footer class="mx-auto max-w-7xl px-4 pt-8 pb-24 sm:px-6 lg:px-8 lg:pb-10">
+      <div class="grid gap-6 border-t border-white/[0.06] pt-6 text-sm sm:grid-cols-[1.4fr_1fr_1fr]">
+        <div>
+          <p class="font-display flex items-center gap-2 text-[15px] font-bold tracking-tight">
+            <!-- Same inline SVG mark as the header (font-independent centering). -->
+            <span
+              class="flex h-7 w-7 items-center justify-center rounded-lg"
+              style="background: linear-gradient(135deg, #9945FF, #14F195)"
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none">
+                <path d="M12 3.5 L20.5 12 L12 20.5 L3.5 12 Z" stroke="#fff" stroke-width="2.8" stroke-linejoin="round"></path>
+                <path d="M12 8.6 L15.4 12 L12 15.4 L8.6 12 Z" fill="#fff"></path>
+              </svg>
+            </span>
+            <span>Subscriptions<span class="grad-text">.sol</span></span>
+          </p>
+          <p class="mt-3 max-w-sm text-xs leading-relaxed text-white/60">
+            <span data-i18n="footer.modelA">Model B: delegate +</span>
+            <span class="font-mono text-[11px]">transfer_checked</span>
+            <span data-i18n="footer.modelB">— zero custody, funds stay in the wallet until charge day.</span>
+          </p>
+        </div>
+        <nav aria-label="Footer">
+          <p class="text-xs font-semibold tracking-wider text-white/60 uppercase" data-i18n="footer.navTitle">Site</p>
+          <ul class="mt-3 space-y-2 text-white/65">
+            <li><a class="hover:text-white" href="/#plany" data-i18n="nav.plans">Plans</a></li>
+            <li><a class="hover:text-white" href="/merchant" data-i18n="nav.merchant">Merchant</a></li>
+            <li><a class="hover:text-white" href="/manage" data-i18n="nav.manage">My subscriptions</a></li>
+            <li><a class="hover:text-white" href="/blink" data-i18n="nav.blinks">Blinks</a></li>
+            <li><a class="hover:text-white" href="/examples" data-i18n="nav.examples">Examples</a></li>
+            <li><a class="hover:text-white" href="/legal" data-i18n="jfaq.legalNav">Legal</a></li>
+          </ul>
+        </nav>
+        <div>
+          <p class="text-xs font-semibold tracking-wider text-white/60 uppercase" data-i18n="footer.statusTitle">Network</p>
+          <dl class="mt-3 space-y-2 font-mono text-xs text-white/55">
+            <div class="flex items-center gap-2">
+              <dt class="text-white/50" data-i18n="footer.programLabel">program</dt>
+              <dd>
+                <a
+                  class="font-mono text-xs text-[#7df4ff] underline decoration-current underline-offset-2 transition-colors hover:text-[#00f0ff]"
+                  href={explorerHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={PROGRAM_ID.toBase58()}>{shortAddr(PROGRAM_ID)}</a
+                >
+              </dd>
+            </div>
+            <div class="flex items-center gap-2">
+              <dt class="text-white/50" data-i18n="footer.clusterLabel">cluster</dt>
+              <dd class="flex items-center gap-1.5">
+                <span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[#14f195]" aria-hidden="true"></span>
+                {CLUSTER}
+              </dd>
+            </div>
+          </dl>
+          <p class="mt-4 text-xs text-white/50"><span data-i18n="footer.lang">Language</span>: EN | PL</p>
+        </div>
+        <p class="mt-6 border-t border-white/[0.06] pt-5 text-center font-mono text-[11px] tracking-[0.06em] text-white/50 uppercase sm:col-span-3">
+          © 2026 OnchainSUB · High-throughput recurring telemetry
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      import "../lib/i18n-static.js";
+      import "../lib/i18n-app.js";
+      import { applyStaticLang } from "../lib/i18n.js";
+      try {
+        applyStaticLang(localStorage.getItem("solhack-lang") === "pl" ? "pl" : "en");
+      } catch {
+        applyStaticLang("en");
+      }
+    </script>
+
+    <Toasts client:idle />
+
+    <style is:global>
+      /* ------------------------------------------------------------------
+         Self-hosted fonts (files in public/fonts/). Exact woff2 subsets that
+         fonts.googleapis.com used to serve (latin + latin-ext — the latter
+         covers PL diacritics). Variable files, so one file spans each
+         family's whole weight range. Replaces both Google <link> tags and
+         keeps the future strict CSP 'self'-only.
+         ------------------------------------------------------------------ */
+      @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 400 600;
+        font-display: swap;
+        src: url("/fonts/inter-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 400 600;
+        font-display: swap;
+        src: url("/fonts/inter-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 400 600;
+        font-display: swap;
+        src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 400 600;
+        font-display: swap;
+        src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      @font-face {
+        font-family: "Space Grotesk";
+        font-style: normal;
+        font-weight: 500 700;
+        font-display: swap;
+        src: url("/fonts/space-grotesk-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "Space Grotesk";
+        font-style: normal;
+        font-weight: 500 700;
+        font-display: swap;
+        src: url("/fonts/space-grotesk-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      /* Icon font: display:block (as Google served it) so ligature glyph names
+         never flash as raw text while the font loads. The pinned axes
+         (opsz 24, wght 400, FILL 0, GRAD 0) are applied by .msym in
+         styles/global.css. */
+      @font-face {
+        font-family: "Material Symbols Outlined";
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        src: url("/fonts/material-symbols-outlined.woff2") format("woff2");
+      }
+
+      /* Anchored sections (e.g. /#plany) land below the sticky header
+         (~64px tall) instead of hiding their titles underneath it. */
+      [id] {
+        scroll-margin-top: 5rem;
+      }
+    </style>
+  </body>
+</html>

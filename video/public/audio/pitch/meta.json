@@ -1,0 +1,30 @@
+{
+ "s1": {
+  "dur": 8.405,
+  "text": "Subscriptions on-chain usually mean one of two bad options: lock your money in escrow, or hand a contract an unlimited allowance."
+ },
+ "s2": {
+  "dur": 13.184,
+  "text": "Card rails charge about two point nine percent plus thirty cents on every single charge, settle in about two days, and keep your card on file. Crypto solved the transfer, but it never solved the recurring pull."
+ },
+ "s3": {
+  "dur": 16.917,
+  "text": "OnchainSUB is a Solana program for recurring payments with zero custody. You approve a single S P L token delegate, capped at exactly one period. The program can only pull that amount once per period, and your funds stay in your wallet until charge day."
+ },
+ "s4": {
+  "dur": 18.56,
+  "text": "A merchant creates a plan on chain: a mint, an amount, and a period. A subscriber approves the subscription account as their delegate. Each period the merchant calls charge, and the program signs for exactly the plan amount. It cannot overcharge, because charge takes no amount argument at all."
+ },
+ "s5": {
+  "dur": 8.939,
+  "text": "It is live on Solana devnet today, and the whole product is running: checkout, merchant tools, wallet actions, and an embeddable checkout widget."
+ },
+ "s6": {
+  "dur": 10.347,
+  "text": "Every plan, every subscription and every charge is a public on chain account. You can verify the program itself, and every charge it has made, on the explorer."
+ },
+ "s7": {
+  "dur": 11.008,
+  "text": "I am Rafal, a solo builder from Krakow, Poland. I wrote the on chain program, the backend, and the frontend. This is the piece I could not find anywhere, so I built it."
+ }
+}

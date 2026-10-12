@@ -1,0 +1,14 @@
+# Build context hygiene — secrets and junk never reach the Docker daemon.
+.env
+.env.*
+!.env.example
+target/
+dist/
+node_modules/
+.wrangler/
+.astro/
+*.db
+e2e/test-results/
+e2e/playwright-report/
+.git/
+.stitch-ref/

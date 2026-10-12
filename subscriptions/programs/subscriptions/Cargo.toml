@@ -1,0 +1,22 @@
+[package]
+name = "subscriptions"
+version = "0.1.0"
+description = "On-chain recurring subscriptions (Model B delegate + transfer_checked)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "subscriptions"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+# init-if-needed enables the merchant_ata init_if_needed account in charge.rs.
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["token", "associated_token"] }

@@ -1,0 +1,1 @@
+{"rules":[{"pathPattern":"/api/actions/**","apiChainId":"solana:devnet"}]}

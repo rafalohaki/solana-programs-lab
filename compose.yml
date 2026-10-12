@@ -1,0 +1,111 @@
+# Fullstack: frontend :3725 (public, via solhack.rafal.si) → backend :3001 (internal).
+name: solhack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-solhack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-solhack}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-solhack}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "1.0"
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-solhack}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-solhack}
+      REDIS_URL: redis://redis:6379
+      SOLANA_DEVNET_RPC: ${SOLANA_DEVNET_RPC:-https://api.devnet.solana.com}
+      SOLANA_TESTNET_RPC: ${SOLANA_TESTNET_RPC:-https://api.testnet.solana.com}
+      CLUSTER: ${CLUSTER:-devnet}
+      HELIUS_API_KEY: ${HELIUS_API_KEY:-}
+      HELIUS_WEBHOOK_SECRET: ${HELIUS_WEBHOOK_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.protonmail.ch}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-OnchainSUB}
+      MAIL_TEST_TOKEN: ${MAIL_TEST_TOKEN:-}
+      RUSTFS_URL: ${RUSTFS_URL:-http://media:9000}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"await fetch('http://localhost:4321/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    cpus: "1.0"
+    ports:
+      - "3725:4321"
+    environment:
+      BACKEND_URL: http://backend:3001
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # RustFS — S3-compatible local media/CDN origin. Not exposed to the host:
+  # all reads go through the frontend proxy at /media/* (same origin, no CORS).
+  media:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-}
+      RUSTFS_VOLUMES: /data
+    volumes:
+      - mediadata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9000/minio/health/live >/dev/null 2>&1 || curl -sf http://localhost:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  mediadata:
+  redisdata:

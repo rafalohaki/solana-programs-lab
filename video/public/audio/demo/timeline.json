@@ -1,0 +1,214 @@
+{
+  "fps": 30,
+  "totalFrames": 5308,
+  "totalSeconds": 176.9333,
+  "scenes": [
+    {
+      "id": "01_cold_open",
+      "label": "Cold open",
+      "eyebrow": "live product demo",
+      "startFrame": 0,
+      "durationInFrames": 274,
+      "voOffsetInFrames": 24,
+      "voDurationInFrames": 235,
+      "start": 0.0,
+      "end": 9.133
+    },
+    {
+      "id": "02_problem",
+      "label": "Problem",
+      "eyebrow": "subscriptions today \u00b7 card rails",
+      "startFrame": 274,
+      "durationInFrames": 395,
+      "voOffsetInFrames": 9,
+      "voDurationInFrames": 350,
+      "start": 9.133,
+      "end": 22.3
+    },
+    {
+      "id": "03_mechanism",
+      "label": "Mechanism",
+      "eyebrow": "model b \u00b7 delegate, not custody",
+      "startFrame": 669,
+      "durationInFrames": 1215,
+      "voOffsetInFrames": 9,
+      "voDurationInFrames": 1137,
+      "start": 22.3,
+      "end": 62.8,
+      "beats": [
+        {
+          "frame": 9,
+          "text": "The merchant creates a plan: amount and period written to the chain once, immutably."
+        },
+        {
+          "frame": 173,
+          "text": "The subscriber approves the subscription account as a token delegate, capped at one period, then signs subscribe."
+        },
+        {
+          "frame": 389,
+          "text": "On charge day the merchant calls charge. Charge takes no amount argument: it reads the amount from the immutable plan, then C P I's transfer checked, signed by the subscription P D A. That blocks overcharge structurally."
+        },
+        {
+          "frame": 852,
+          "text": "Forty basis points. Funds stay in the subscriber's wallet until charge day, and cancel revokes the delegate, so cancellation can never be bricked."
+        }
+      ]
+    },
+    {
+      "id": "04_tour_plans",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 1884,
+      "durationInFrames": 299,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 282,
+      "start": 62.8,
+      "end": 72.767,
+      "clip": "plans",
+      "clipFrames": 330,
+      "caption": "Live plans grid \u00b7 amount, period and delegate cap read from the chain"
+    },
+    {
+      "id": "05_tour_proofs",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 2183,
+      "durationInFrames": 279,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 263,
+      "start": 72.767,
+      "end": 82.067,
+      "clip": "proofs",
+      "clipFrames": 300,
+      "caption": "Proofs table \u00b7 delegate limit, fee split and treasury, versus card rails"
+    },
+    {
+      "id": "06_tour_checkout",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 2462,
+      "durationInFrames": 372,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 355,
+      "start": 82.067,
+      "end": 94.467,
+      "clip": "checkout",
+      "clipFrames": 300,
+      "caption": "Checkout \u00b7 authorized origin runs, phishing origin is refused 403"
+    },
+    {
+      "id": "07_tour_merchant",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 2834,
+      "durationInFrames": 257,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 240,
+      "start": 94.467,
+      "end": 103.033,
+      "clip": "merchant",
+      "clipFrames": 330,
+      "caption": "Merchant panel \u00b7 plan creator, batch invoicing, live preview"
+    },
+    {
+      "id": "08_tour_manage",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 3091,
+      "durationInFrames": 265,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 248,
+      "start": 103.033,
+      "end": 111.867,
+      "clip": "manage",
+      "clipFrames": 270,
+      "caption": "Manage \u00b7 every approved subscription and a kill switch"
+    },
+    {
+      "id": "09_tour_agent",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 3356,
+      "durationInFrames": 312,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 296,
+      "start": 111.867,
+      "end": 122.267,
+      "clip": "agent",
+      "clipFrames": 260,
+      "caption": "Agent control plane \u00b7 scoped, capped, revocable allowance"
+    },
+    {
+      "id": "10_tour_blink",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 3668,
+      "durationInFrames": 212,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 195,
+      "start": 122.267,
+      "end": 129.333,
+      "clip": "blink",
+      "clipFrames": 270,
+      "caption": "Solana Actions \u00b7 the same plan subscribable as a Blink"
+    },
+    {
+      "id": "11_tour_widget",
+      "label": "Live product",
+      "eyebrow": "solhack.rafal.si \u00b7 live on devnet",
+      "startFrame": 3880,
+      "durationInFrames": 210,
+      "voOffsetInFrames": 8,
+      "voDurationInFrames": 193,
+      "start": 129.333,
+      "end": 136.333,
+      "clip": "examples",
+      "clipFrames": 270,
+      "caption": "Embeddable widget \u00b7 full checkout in any page, one script tag"
+    },
+    {
+      "id": "12_proof",
+      "label": "On-chain proof",
+      "eyebrow": "anchor 0.31.1 \u00b7 solana devnet",
+      "startFrame": 4090,
+      "durationInFrames": 784,
+      "voOffsetInFrames": 10,
+      "voDurationInFrames": 743,
+      "start": 136.333,
+      "end": 162.467,
+      "beats": [
+        {
+          "frame": 10,
+          "text": "All of it is backed by one Anchor program, deployed and executable on devnet."
+        },
+        {
+          "frame": 164,
+          "text": "This is its program I D."
+        },
+        {
+          "frame": 219,
+          "text": "A real charge transaction: success, no error, five thousand lamports network fee."
+        },
+        {
+          "frame": 400,
+          "text": "A demo charge on a test mint, two of them, one merchant, no paying customers, no revenue."
+        },
+        {
+          "frame": 579,
+          "text": "Plus twenty four Anchor tests, twenty seven backend tests and fifteen end to end tests."
+        }
+      ]
+    },
+    {
+      "id": "13_close",
+      "label": "Close",
+      "eyebrow": "devnet \u00b7 demo data only",
+      "startFrame": 4874,
+      "durationInFrames": 434,
+      "voOffsetInFrames": 12,
+      "voDurationInFrames": 338,
+      "start": 162.467,
+      "end": 176.933
+    }
+  ]
+}

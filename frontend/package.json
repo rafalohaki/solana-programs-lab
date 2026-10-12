@@ -1,0 +1,33 @@
+{
+  "description": "Subscriptions dApp — Astro + Svelte islands on standalone Node (Bun, strict TS).",
+  "name": "@subscriptions/frontend",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro check",
+    "preview": "astro preview",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/node": "9",
+    "@astrojs/svelte": "^7.1.0",
+    "@solana/spl-token": "^0.4.8",
+    "@solana/web3.js": "^1.98.0",
+    "astro": "^5.13.0",
+    "bs58": "^6.0.0",
+    "effect": "^4.0.1",
+    "svelte": "^5.28.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@tailwindcss/vite": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}

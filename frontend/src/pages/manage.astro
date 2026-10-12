@@ -1,0 +1,24 @@
+---
+// Wallet badge first paint needs the request cookie → server-rendered.
+export const prerender = false;
+import Layout from "../layouts/Layout.astro";
+import ManagePanel from "../components/ManagePanel.svelte";
+import ReceiptHistory from "../components/ReceiptHistory.svelte";
+---
+
+<Layout title="My subscriptions" description="Manage subscriptions: upcoming charges, merchant charge, cancellation.">
+  <section class="w-full pt-12 pb-12">
+    <p class="font-mono text-[11px] tracking-wider text-white/40 uppercase" data-i18n="manage.eyebrow">subscriber · merchant</p>
+    <h1 class="font-display mt-2 text-3xl font-bold tracking-tight sm:text-4xl" data-i18n="manage.h1">My subscriptions</h1>
+    <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/55 sm:text-[15px]">
+      <span data-i18n="manage.leadA">See every subscription and its countdown to the next charge in one place. Connect your wallet — cancelling sets status</span>
+      <span class="font-mono text-xs" data-i18n="manage.leadStatus">Cancelled</span>
+      <span data-i18n="manage.leadB">and clears the delegate. If the connected wallet is the plan's merchant, you'll also see the charge button.</span>
+    </p>
+    <div class="mt-6">
+      <ManagePanel client:load />
+    </div>
+    <!-- Secondary history view: hydrate on idle, after the main panel. -->
+    <ReceiptHistory client:idle />
+  </section>
+</Layout>

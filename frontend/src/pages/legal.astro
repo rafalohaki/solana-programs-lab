@@ -1,0 +1,95 @@
+---
+// /legal: static compliance skeleton — server-rendered (Layout reads the
+// wallet cookie for first-paint badge; prerender has no request cookies).
+export const prerender = false;
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout
+  title="Legal"
+  description="Renewal terms, takedown contact, operator contact, and tracking policy for OnchainSUB."
+>
+  <section class="mx-auto max-w-prose pt-12 pb-16" aria-labelledby="legal-title">
+    <p class="eyebrow text-white/40" data-i18n="jfaq.legalEyebrow">legal · renewals, takedowns, contact</p>
+    <h1 id="legal-title" class="font-display text-h2 mt-2 font-bold tracking-tight" data-i18n="jfaq.legalTitle">
+      Legal &amp; renewals
+    </h1>
+    <p class="text-lead mt-2 text-white/55" data-i18n="jfaq.legalLead">
+      OnchainSUB runs as a devnet demo built for the Colosseum hackathon. This page states how renewals bill
+      and stop, where to report abuse, and what we (don't) track.
+    </p>
+
+    <section id="renewals" aria-labelledby="legal-renew-title" class="mt-10">
+      <p class="eyebrow text-white/40" data-i18n="jfaq.legalRenewEyebrow">renewals &amp; cancellation</p>
+      <h2 id="legal-renew-title" class="font-display mt-2 text-xl font-bold tracking-tight" data-i18n="jfaq.legalRenewTitle">
+        How billing renews — and stops
+      </h2>
+      <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="jfaq.legalRenewBody">
+        Every plan auto-renews: one on-chain charge per period at the plan amount, pulled through an SPL delegate
+        capped at exactly one period. Funds stay in your wallet until charge day — nothing is prepaid and nothing is
+        held by the protocol.
+      </p>
+      <p class="mt-2 text-sm leading-relaxed text-white/55">
+        <span data-i18n="jfaq.legalRenewCancelA">Cancel anytime in </span><a
+          class="text-[#7df4ff] underline decoration-current underline-offset-2 transition-colors hover:text-[#00f0ff]"
+          href="/manage"
+          data-i18n="nav.manage">My subscriptions</a
+        ><span data-i18n="jfaq.legalRenewCancelB"
+          >: the subscription flips to Cancelled and the SPL delegate is revoked, so every later charge fails and
+          billing stops immediately.</span
+        >
+      </p>
+    </section>
+
+    <section id="dmca" aria-labelledby="legal-dmca-title" class="mt-10">
+      <p class="eyebrow text-white/40" data-i18n="jfaq.legalDmcaEyebrow">takedowns · dmca</p>
+      <h2 id="legal-dmca-title" class="font-display mt-2 text-xl font-bold tracking-tight" data-i18n="jfaq.legalDmcaTitle">
+        Reporting infringing content
+      </h2>
+      <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="jfaq.legalDmcaBody">
+        Our formal designated-agent procedure is still in preparation — the service runs as a devnet demo. Until it
+        ships, send takedown notices to the operator contact below with the work identified, the infringing URL, your
+        contact details, and a good-faith statement.
+      </p>
+    </section>
+
+    <section id="contact" aria-labelledby="legal-dsa-title" class="mt-10">
+      <p class="eyebrow text-white/40" data-i18n="jfaq.legalDsaEyebrow">contact point · dsa</p>
+      <h2 id="legal-dsa-title" class="font-display mt-2 text-xl font-bold tracking-tight" data-i18n="jfaq.legalDsaTitle">
+        Operator contact
+      </h2>
+      <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="jfaq.legalDsaBody">
+        Single contact point for DSA notices, abuse reports, and support. Please include links, transaction
+        signatures, or screenshots where relevant.
+      </p>
+      <p class="mt-2 font-mono text-sm">
+        <span class="text-white/55" data-i18n="jfaq.legalDsaMailHint">Write to</span><span class="text-white/55"
+          >: </span
+        ><a
+          class="text-[#7df4ff] underline decoration-current underline-offset-2 transition-colors hover:text-[#00f0ff]"
+          href="mailto:admin@2b2t.pl">admin@2b2t.pl</a
+        >
+      </p>
+    </section>
+
+    <section id="privacy" aria-labelledby="legal-privacy-title" class="mt-10">
+      <p class="eyebrow text-white/40" data-i18n="jfaq.legalPrivacyEyebrow">privacy · no trackers</p>
+      <h2
+        id="legal-privacy-title"
+        class="font-display mt-2 text-xl font-bold tracking-tight"
+        data-i18n="jfaq.legalPrivacyTitle"
+      >
+        What we (don't) track
+      </h2>
+      <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="jfaq.legalPrivacyBody">
+        No analytics, no session replay, no third-party trackers. Fonts are self-hosted, so pages make no requests
+        to outside providers. What we do keep: on-chain signatures, charge amounts, and invoice metadata needed for
+        receipts.
+      </p>
+    </section>
+  </section>
+</Layout>
+
+<script>
+  import "../lib/i18n-proofs.js";
+</script>

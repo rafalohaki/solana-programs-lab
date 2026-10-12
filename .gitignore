@@ -1,0 +1,39 @@
+# Sekrety i artefakty buildu — nigdy do gita. Prod nadpisuje przez env.
+.env
+.env.*
+!.env.example
+dist/
+target/
+node_modules/
+.wrangler/
+*.db
+.astro/
+.stitch-ref/
+video/out/
+
+# Local spikes (never submitted)
+spike-native/
+
+# Throwaway demo bootstrap scripts (kept on disk, never published).
+# They read secrets from the environment (HELIUS_API_KEY) but are scratch files.
+frontend/*.tmp.mjs
+
+# Heavy raw demo media — never commit (hundreds of MB of JPEG frames).
+video/public/live/
+video/public/live-*/
+
+# Local capture backups (dated snapshots of raw recordings).
+video/public/_backup-*/
+
+# Regenerable HyperFrames audio analysis cache (~30 MB of .npy feature blobs).
+video/public/audio/demo/cache/
+
+# Per-scene narration stems; the composition renders from the merged
+# audio/demo/narration.wav + music.wav, and these are produced by an external
+# synthesis script that is not part of this repository.
+video/public/audio/demo/vo/
+
+# Local tooling / editor state
+.zcode/
+.vscode/
+test-results/

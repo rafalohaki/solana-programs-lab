@@ -1,0 +1,847 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Void Protocol surface scale (DESIGN.md wins over legacy Relay kit) */
+  --color-void: #11131d;
+  --color-abyss: #0c0e17;
+  --color-panel: #191b25;
+  --color-panel-2: #1d1f29;
+  --color-panel-3: #282934;
+  --color-ink: #e1e1f0;
+  --color-mist: #cec2d8;
+  --color-dim: #8e93a6;
+  --color-grape: #9945ff;
+  --color-mint: #14f195;
+  --color-neon: #00f0ff;
+  --color-coral: #ff3b69;
+  --color-tint: #d8b9ff;
+  --color-bright: #373944;
+  --color-highest: #32343f;
+  --color-outline: #978da1;
+  --color-line: rgba(255, 255, 255, 0.08);
+  /* legacy Relay aliases — mapped onto Void tokens so sibling slices keep working */
+  --color-canvas: #11131d;
+  --color-card: #191b25;
+  --color-raised: #1d1f29;
+  --color-border: #4c4355;
+  --color-action: #9945ff;
+  --color-resolved: #14f195;
+  --color-muted: #cec2d8;
+  --color-flare: #ff3b69;
+  --color-lime: #14f195;
+
+  --radius-btn: 0.5rem;
+  --radius-card: 0.75rem;
+  --radius-panel: 0.75rem;
+
+  /* Premium rhythm scale (px): 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96 */
+  --rhythm-4: 0.25rem;
+  --rhythm-8: 0.5rem;
+  --rhythm-12: 0.75rem;
+  --rhythm-16: 1rem;
+  --rhythm-24: 1.5rem;
+  --rhythm-32: 2rem;
+  --rhythm-48: 3rem;
+  --rhythm-64: 4rem;
+  --rhythm-96: 6rem;
+
+  /* Linear discipline: section H2 28–32px, section lead 14px (text-sm) */
+  --text-h2: clamp(1.75rem, 1.25rem + 2.5vw, 2rem);
+  --text-lead: 0.875rem;
+
+  /* Shadows: subtle (hairlines) / raised (cards) / float (popovers) */
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-raised: 0 12px 32px -12px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 18px 50px -22px rgba(0, 0, 0, 0.6);
+
+  /* Motion: expo-out, fast 150ms / medium 200ms (Tailwind duration-150/200) */
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Semantic aliases — every value points at an existing Void token, no new hues.
+     border → --color-line, muted → --color-dim / --color-muted, radius → --radius-*. */
+  --color-bg: var(--color-void);
+  --color-surface: var(--color-panel);
+  --color-accent: var(--color-grape);
+  --color-success: var(--color-resolved);
+  --color-danger: var(--color-coral);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: rgba(153, 69, 255, 0.45);
+  color: #ffffff;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11", "tnum";
+  text-wrap: pretty;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+section[id] {
+  scroll-margin-top: 80px;
+}
+
+/* Ground (Level 0): void canvas + two fixed radial ambients from DESIGN.md. */
+.bg-scene {
+  background:
+    radial-gradient(circle at top right, rgba(153, 69, 255, 0.08), transparent 40%),
+    radial-gradient(circle at bottom left, rgba(20, 241, 149, 0.05), transparent 45%),
+    var(--color-void);
+  background-attachment: fixed;
+}
+
+/* Linear-discipline surface: flat layer #14161f at 92%, single hairline,
+   no blur (blur lives only on sticky header / fixed tabbar / popovers),
+   no specular top edge, no glow. Neutral hover: hairline brightens. */
+.glass {
+  background: rgba(20, 22, 31, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: none;
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.glass:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Hero backdrop: the single allowed accent mesh (shared with grad-text)
+   + inline-SVG grain. Linear discipline: opacity halved, no other glows. */
+.hero-mesh {
+  background:
+    radial-gradient(42rem 22rem at 50% -6rem, rgba(153, 69, 255, 0.07), transparent 70%),
+    radial-gradient(36rem 20rem at 85% 30%, rgba(20, 241, 149, 0.04), transparent 70%),
+    radial-gradient(30rem 18rem at 12% 42%, rgba(153, 69, 255, 0.035), transparent 70%);
+}
+
+.hero-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  opacity: 0.02;
+}
+
+/* Hero entrance: fade + 12px rise, stagger via inline animation-delay (60ms
+   steps). `both` fill keeps the pre-delay state invisible without FOUC. */
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-in {
+  animation: hero-rise 500ms var(--ease-premium) both;
+}
+
+.grad-text {
+  background: linear-gradient(92deg, #9945ff 5%, #00f0ff 50%, #14f195 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Mono eyebrow labels: JetBrains Mono 11px, uppercase, tracked, muted. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Tabular metrics: no layout reflow while balances stream. */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Hairline divider rows between label/value pairs. */
+.hairline {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Relay pill tab bar + stat deltas + queue rows */
+.pillbar {
+  background: rgba(12, 14, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.pillbar a[aria-current="page"] {
+  background: var(--color-panel-3);
+  color: var(--color-ink);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.delta-up {
+  color: var(--color-resolved);
+}
+
+.delta-down {
+  color: var(--color-coral);
+}
+.queue-row {
+  background: rgba(29, 31, 41, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.alert-card {
+  background: linear-gradient(160deg, #2a1650, #191b25 70%);
+  border: 1px solid rgba(153, 69, 255, 0.3);
+  border-radius: 16px;
+  color: #fff;
+}
+
+/* Primary: solid #9945ff, white text, hover #7b26e5. No gradients, no glow.
+   .btn-stitch below renders identically (both classes stay — other pages
+   use each name; one shared look). */
+.btn-primary {
+  background: #9945ff;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border-radius: 8px;
+  transition:
+    transform 150ms var(--ease-premium),
+    background 150ms var(--ease-premium);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-stitch:focus-visible,
+.btn-ghost:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-void),
+    0 0 0 4px rgba(153, 69, 255, 0.6);
+}
+
+/* Focus fallback for everything outside .btn-* (filter pills, tabs, toggles,
+   fields, links): UA outline replaced with the same accent ring (2px ring at
+   60% + 2px offset). :where() keeps specificity at zero so the .btn-*
+   rule above still wins. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-void),
+    0 0 0 4px rgba(153, 69, 255, 0.6);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #7b26e5;
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary: transparent + hairline, cyan edge on hover. */
+.btn-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 500;
+  border-radius: 8px;
+  transition:
+    transform 150ms var(--ease-premium),
+    background 150ms var(--ease-premium),
+    border-color 150ms var(--ease-premium);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: #00f0ff;
+  background: rgba(0, 240, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  border: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-dim);
+  border-radius: 8px;
+  transition:
+    transform 150ms var(--ease-premium),
+    background 150ms var(--ease-premium),
+    border-color 150ms var(--ease-premium),
+    color 150ms var(--ease-premium);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--color-mint);
+}
+
+.btn-ghost:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.field {
+  background: #12141e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--color-ink);
+  outline: none;
+  transition:
+    border-color 150ms var(--ease-premium),
+    box-shadow 150ms var(--ease-premium);
+}
+
+.field:focus {
+  border-color: #9945ff;
+  box-shadow: inset 0 0 8px rgba(0, 240, 255, 0.15);
+}
+
+/* Keyboard focus keeps the inset glow AND adds the shared outer ring
+   (same specificity as .field:focus, later in source so it wins). */
+.field:focus-visible {
+  border-color: #9945ff;
+  box-shadow:
+    inset 0 0 8px rgba(0, 240, 255, 0.15),
+    0 0 0 2px var(--color-void),
+    0 0 0 4px rgba(153, 69, 255, 0.6);
+}
+
+.field::placeholder {
+  color: var(--color-outline);
+}
+
+.field option {
+  background: var(--color-panel-2);
+  color: var(--color-ink);
+}
+
+.field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card-hover {
+  transition:
+    transform 200ms var(--ease-premium),
+    border-color 200ms var(--ease-premium),
+    box-shadow 200ms var(--ease-premium);
+}
+
+/* Neutral lift: border white/8 → white/16, -2px, raised shadow. The single
+   purple accent lives only in solid CTAs + grad-text + hero mesh, never here. */
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: var(--shadow-raised);
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-in {
+  animation: toast-in 200ms var(--ease-premium);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Stat grid: divided 2×2 block on mobile, spaced cards on desktop. */
+@media (max-width: 639px) {
+  .stat-grid {
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .stat-grid > * {
+    border: 0;
+    border-radius: 0;
+    background: var(--color-panel);
+    backdrop-filter: none;
+  }
+
+  .stat-grid > *:hover {
+    border-color: transparent;
+  }
+}
+
+/* Stitch subscribe: identical solid twin of .btn-primary (see above). */
+.btn-stitch {
+  background: #9945ff;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border-radius: 8px;
+  transition:
+    transform 150ms var(--ease-premium),
+    background 150ms var(--ease-premium);
+}
+
+.btn-stitch:hover:not(:disabled) {
+  background: #7b26e5;
+}
+
+.btn-stitch:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-stitch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Token pills (pill radius is reserved for these + status chips). */
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 241, 149, 0.3);
+  background: rgba(20, 241, 149, 0.12);
+  color: #14f195;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tag-pill--grape {
+  border-color: rgba(153, 69, 255, 0.45);
+  background: rgba(153, 69, 255, 0.12);
+  color: #d8b9ff;
+}
+
+.tag-pill--cyan {
+  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.08);
+  color: #00f0ff;
+}
+
+/* Neutral (idle) variant: for "off" states that must not read as emerald
+   (e.g. delegate-allowance idle chip on /manage). */
+.tag-pill--idle {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Status chips: emerald active (+ pulse dot) / coral past-due. */
+.chip-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 241, 149, 0.3);
+  background: rgba(20, 241, 149, 0.12);
+  color: #14f195;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-active::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #14f195;
+  box-shadow: 0 0 6px rgba(20, 241, 149, 0.9);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+.chip-pastdue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 59, 105, 0.3);
+  background: rgba(255, 59, 105, 0.12);
+  color: #ff3b69;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.codeblock {
+  background: rgba(12, 14, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.65;
+  color: rgba(225, 225, 240, 0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plan-accent {
+  height: 2px;
+  border-radius: 999px;
+  background: #9945ff;
+  opacity: 0.7;
+}
+
+.filter-pill {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(225, 225, 240, 0.6);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease-premium),
+    border-color 150ms var(--ease-premium),
+    color 150ms var(--ease-premium);
+}
+
+.filter-pill:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.filter-pill[aria-pressed="true"] {
+  background: #282934;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+/* Focus must beat resting shadows: .pillbar a[aria-current] and
+   .filter-pill[aria-pressed] override the zero-specificity :where()
+   fallback, leaving keyboard focus invisible. Same accent ring, tied
+   specificity but later in source so it wins. */
+.pillbar a:focus-visible,
+.filter-pill:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-void),
+    0 0 0 4px rgba(153, 69, 255, 0.6);
+}
+
+/* Material Symbols glyph (Stitch reference uses them across cards/stats).
+   Clipped to a 1em box: before the font arrives (or if it fails), the raw
+   ligature word (e.g. "subscriptions") must never size layout — the mobile
+   tab bar exploded from this. With font-display:block the box stays empty
+   during load, then swaps to the icon. */
+.msym {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  display: inline-block;
+  width: 1em;
+  overflow: hidden;
+  flex-shrink: 0;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Void data table: hairline row dividers on layer-1, mono uppercase head. */
+.table-void {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.table-void thead tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(225, 225, 240, 0.4);
+}
+
+.table-void th,
+.table-void td {
+  padding: 10px 14px;
+}
+
+.table-void tbody tr {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.table-void tbody tr:first-child {
+  border-top: 0;
+}
+
+/* Mobile <768px: opt-in stacked cards for wide tables (porting agents: add
+   .table-stack next to .table-void; thead hides, each row becomes a card). */
+@media (max-width: 767px) {
+  .table-stack thead {
+    display: none;
+  }
+
+  .table-stack,
+  .table-stack tbody,
+  .table-stack tr,
+  .table-stack td {
+    display: block;
+    width: 100%;
+  }
+
+  .table-stack tbody tr {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(29, 31, 41, 0.7);
+    margin-bottom: 8px;
+    padding: 4px 0;
+  }
+
+  .table-stack td {
+    border: 0;
+    padding: 6px 14px;
+  }
+
+  .table-stack td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(225, 225, 240, 0.4);
+  }
+}
+
+/* Void type scale (DESIGN.md typography, Space Grotesk / Inter / JetBrains Mono). */
+.display-hero {
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 64px;
+  letter-spacing: -0.03em;
+}
+
+.headline-lg {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+}
+
+.headline-md {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+.headline-sm {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.body-lg {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+.body-md {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.body-sm {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.mono-metric {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.mono-address {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.mono-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 767px) {
+  .display-hero {
+    font-size: 36px;
+    line-height: 44px;
+    letter-spacing: -0.02em;
+  }
+
+  .headline-lg {
+    font-size: 26px;
+    line-height: 32px;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Streaming telemetry bar: gradient fill purple → emerald over void track. */
+.stream-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.stream-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #9945ff, #14f195);
+  transition: width 200ms var(--ease-premium);
+}
+
+/* Accessibility: stop every looping animation (live dots, status-chip pulse,
+   skeleton shimmer, Tailwind's animate-ping) and smooth scrolling when the
+   user asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .live-dot,
+  .chip-active::before,
+  .skeleton::after,
+  .animate-ping,
+  .hero-in,
+  .toast-in {
+    animation: none;
+  }
+
+  /* Frozen shimmer would sit as a static sheen once animation stops. */
+  .skeleton::after {
+    opacity: 0;
+  }
+}

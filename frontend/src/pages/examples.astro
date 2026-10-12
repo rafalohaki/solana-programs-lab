@@ -1,0 +1,598 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { PublicKey } from "@solana/web3.js";
+import { DEMO_PLANS, DEMO_RECEIPTS } from "../lib/demo.js";
+import {
+  CLUSTER,
+  connection,
+  decodePlan,
+  fetchMintDecimals,
+  formatPeriod,
+  formatTokenAmount,
+  shortAddr,
+} from "../lib/chain.js";
+import type { Plan } from "../lib/chain.js";
+import { decimalsFor, KNOWN_MINTS } from "../lib/mints.js";
+
+// Use-case gallery: four case studies (static marketing mechanics only) plus a
+// live widget demo. Pass a real devnet plan: /examples?plan=<PLAN_ADDRESS>
+// (after creating a plan + binding this host via POST /api/widget/sites) and
+// the widget header reads the plan account server-side — amount, period and
+// mint come from the chain, never from copy. Demo mode (?demo=1) runs the
+// widget against DEMO_PLANS[0] fixtures instead of any fetch, per the global
+// rule; with no ?plan= the "Coffee Club" card is an explicitly labelled sample.
+// Output depends on ?demo/?plan (SSR RPC reads, per-request state chips):
+// never let an edge or browser cache one visitor's render for another.
+Astro.response.headers.set("Cache-Control", "no-store");
+const demoParam = Astro.url.searchParams.get("demo") === "1";
+const demoFixture = DEMO_PLANS[0];
+if (demoFixture === undefined) throw new Error("DEMO_PLANS fixture missing.");
+const demoReceipt = DEMO_RECEIPTS[1];
+if (demoReceipt === undefined) throw new Error("DEMO_RECEIPTS fixture missing.");
+const rawPlan = (Astro.url.searchParams.get("plan") ?? "").trim();
+const demoPlan = demoParam ? demoFixture.address : rawPlan;
+
+interface WidgetView {
+  title: string;
+  icon: string; // Material Symbols glyph
+  price: string;
+  interval: string;
+  merchantLine: string | null;
+  found: boolean; // false → ?plan= given but the account is missing on-chain
+}
+let widget: WidgetView;
+if (demoParam) {
+  widget = {
+    title: demoFixture.title,
+    icon: "dns",
+    price: `${demoFixture.amountUi} ${demoFixture.mintSymbol}`,
+    interval: `/ ${demoFixture.periodLabel}`,
+    merchantLine: `merchant: ${demoFixture.merchant.slice(0, 4)}…${demoFixture.merchant.slice(-4)}`,
+    found: true,
+  };
+} else if (rawPlan !== "") {
+  let plan: Plan | null = null;
+  try {
+    const pubkey = new PublicKey(rawPlan);
+    const info = await connection().getAccountInfo(pubkey);
+    if (info !== null) plan = decodePlan(pubkey, new Uint8Array(info.data));
+  } catch {
+    plan = null; // bad address or RPC hiccup → honest dashes below
+  }
+  if (plan === null) {
+    widget = { title: "Plan", icon: "receipt_long", price: "—", interval: "—", merchantLine: null, found: false };
+  } else {
+    const mintAddr = plan.mint.toBase58();
+    // decimalsFor is a pure lookup, but the RPC call behind fetchMintDecimals
+    // (unknown mints) sits OUTSIDE the plan-load try/catch — an uncaught throw
+    // here would 500 the whole page. Degrade to a hidden amount instead.
+    let decimals: number | null = null;
+    try {
+      decimals = decimalsFor(mintAddr) ?? (await fetchMintDecimals(connection(), plan.mint));
+    } catch {
+      decimals = null; // RPC hiccup → amount stays hidden (honest dash below)
+    }
+    const symbol = KNOWN_MINTS.find((m) => m.mint === mintAddr)?.symbol ?? shortAddr(plan.mint, 4);
+    widget = {
+      title: `Plan #${plan.planId.toString()}`,
+      icon: "receipt_long",
+      // Unknown decimals → no price at all: guessing 0 or 6 would render a
+      // wrong amount; a dash stays honest.
+      price: decimals === null ? "—" : `${formatTokenAmount(plan.amount, decimals)} ${symbol}`,
+      interval: `/ ${formatPeriod(plan.periodSeconds)}`,
+      merchantLine: `merchant: ${shortAddr(plan.merchant)} · ${CLUSTER}`,
+      found: true,
+    };
+  }
+} else {
+  widget = { title: "Coffee Club", icon: "local_cafe", price: "—", interval: "—", merchantLine: null, found: true };
+}
+
+// State header for the widget frame: LIVE (a real ?plan= account) vs EXAMPLE
+// (the sample "Coffee Club") vs DEMO (bundled fixtures) — plus the variant
+// where ?plan= is given but the account is missing on-chain. Chip + one
+// "what this means" sentence are picked server-side; EN inline is the
+// default, PL lives in i18n-port4.ts.
+let state: { chipKey: string; chip: string; chipClass: string; hintKey: string; hint: string };
+if (demoParam) {
+  state = {
+    chipKey: "port4.exStateDemo",
+    chip: "DEMO — bundled fixtures",
+    chipClass: "text-[#ffd166]",
+    hintKey: "port4.exStateDemoHint",
+    hint: "Runs entirely on bundled fixtures — no network calls and nothing to sign, safe to click.",
+  };
+} else if (rawPlan !== "" && widget.found) {
+  state = {
+    chipKey: "port4.exStateLive",
+    chip: "LIVE — real plan from ?plan=",
+    chipClass: "text-[#14f195]",
+    hintKey: "port4.exStateLiveHint",
+    hint: "Every number on this card is read from your plan account on devnet — nothing is hard-coded.",
+  };
+} else if (rawPlan !== "") {
+  state = {
+    chipKey: "port4.exStateMissing",
+    chip: "LIVE — plan not found",
+    chipClass: "text-[#ff8a80]",
+    hintKey: "port4.exStateMissingHint",
+    hint: "The address in ?plan= has no account on devnet yet — numbers stay hidden until it exists.",
+  };
+} else {
+  state = {
+    chipKey: "port4.exStateExample",
+    chip: "EXAMPLE — sample “Coffee Club”",
+    chipClass: "text-[#d8b9ff]",
+    hintKey: "port4.exStateExampleHint",
+    hint: "A stand-in sample so you can see the layout — add ?plan=<address> to preview your own plan.",
+  };
+}
+---
+
+<Layout title="Examples" description="Case studies: SaaS RPC, AI agents, community gates, media micropayments — plus a live widget demo.">
+  <section class="relative mx-auto max-w-7xl overflow-hidden px-4 pt-12 pb-12 sm:px-6">
+    <div class="pointer-events-none absolute -top-32 right-12 h-96 w-96 rounded-full bg-[#9945ff]/10 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-24 left-10 h-80 w-80 rounded-full bg-[#14f195]/10 blur-3xl"></div>
+
+    <div class="relative">
+      <p class="eyebrow text-white/40" data-i18n="port4.exEyebrow">
+        OnchainSUB · live examples
+      </p>
+      <div class="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+        <div class="max-w-2xl">
+          <h1 class="font-display mt-2 text-3xl font-bold tracking-tight sm:text-4xl" data-i18n="port4.exH1">
+            See OnchainSUB working: real use cases, a live checkout widget, and the exact calls that power them.
+          </h1>
+          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/55 sm:text-[15px]" data-i18n="port4.exLead">
+            Three steps, no guesswork: pick a use case, run the live checkout widget against a real plan, then ship it
+            with the 3-line snippet. Nothing is charged until you click Subscribe yourself.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 rounded-xl bg-[#191b25] p-2 font-mono">
+          <div class="flex min-w-0 flex-col rounded-lg bg-[#1d1f29] px-4 py-2">
+            <span class="font-mono text-[10px] tracking-wider text-white/35 uppercase" data-i18n="flows2.badgeCustodyLabel">Custody model</span>
+            <span class="font-mono text-[15px] font-semibold tracking-tight text-[#a0ffc3]" data-i18n="payex.badgeCustody">0% CUSTODY (Model B)</span>
+          </div>
+          <div class="flex min-w-0 flex-col rounded-lg bg-[#1d1f29] px-4 py-2">
+            <span class="font-mono text-[10px] tracking-wider text-white/35 uppercase" data-i18n="flows2.badgeTxLabel">Throughput</span>
+            <span class="font-mono text-[15px] font-semibold tracking-tight text-[#00dbe9]" data-i18n="payex.badgeTx">1 TX / PERIOD</span>
+          </div>
+          {demoParam && <span class="chip-pastdue" data-i18n="flows2.demoChip">DEMO — fixtures, no fetch</span>}
+        </div>
+      </div>
+
+      <div class="mt-12 flex min-w-0 flex-col gap-1">
+        <h2 class="font-display flex items-center gap-2 text-xl font-bold tracking-tight">
+          <span class="msym text-[22px] text-[#d8b9ff]" aria-hidden="true">looks_one</span>
+          <span data-i18n="port4.exStep1t">1 · Pick a use case</span>
+        </h2>
+        <p class="text-sm leading-relaxed text-white/55" data-i18n="port4.exStep1Lead">
+          Click a card to jump to the live widget — every scenario below runs on the same checkout.
+        </p>
+      </div>
+
+      <div id="use-cases-grid" class="mt-4 grid gap-4 [&>*]:min-w-0 md:grid-cols-2 xl:grid-cols-4">
+        <a href="#live-widget" class="group relative flex h-auto min-h-72 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 shadow-lg transition-all hover:-translate-y-0.5 hover:border-[#9945ff]/60">
+          <div class="pointer-events-none absolute top-0 right-0 p-4 opacity-10 transition-opacity group-hover:opacity-30" aria-hidden="true">
+            <span class="msym text-[64px] text-[#d8b9ff]">dns</span>
+          </div>
+          <div class="relative flex flex-col gap-2">
+            <span class="w-fit rounded bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-wider text-[#d8b9ff]" data-i18n="flows2.case1tag">CASE 01 // SAAS</span>
+            <h3 class="font-display pt-2 text-lg font-bold" data-i18n="flows2.case1t">Solana Dedicated RPC</h3>
+            <p class="line-clamp-3 text-sm leading-relaxed text-white/55" data-i18n="flows2.case1b">
+              Monthly cluster subscriptions with elastic auto-tiering. No customer capital lock-up.
+            </p>
+          </div>
+          <div class="relative flex flex-col gap-1 pt-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamPrice">Price</span>
+              <span class="truncate font-mono text-[13px] text-[#a0ffc3]" data-i18n="port4.exCase1PriceV">250 USDC / mo</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamBilling">Billing</span>
+              <span class="break-words font-mono text-[13px] text-[#00dbe9]" data-i18n="port4.exCase1BillV">auto-tier — grows with usage</span>
+            </div>
+            <div class="flex items-center gap-1 pt-2 text-[11px] text-[#d8b9ff]/70">
+              <span class="msym text-[14px]" aria-hidden="true">arrow_downward</span>
+              <span data-i18n="port4.exTryIt">Try it in the widget</span>
+            </div>
+          </div>
+        </a>
+
+        <a href="#live-widget" class="group relative flex h-auto min-h-72 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 shadow-lg transition-all hover:-translate-y-0.5 hover:border-[#9945ff]/60">
+          <div class="pointer-events-none absolute top-0 right-0 p-4 opacity-10 transition-opacity group-hover:opacity-30" aria-hidden="true">
+            <span class="msym text-[64px] text-[#00dbe9]">neurology</span>
+          </div>
+          <div class="relative flex flex-col gap-2">
+            <span class="w-fit rounded bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-wider text-[#00f0ff]" data-i18n="flows2.case2tag">CASE 02 // AI AGENTS</span>
+            <h3 class="font-display pt-2 text-lg font-bold" data-i18n="flows2.case2t">Autonomous agent plane</h3>
+            <p class="line-clamp-3 text-sm leading-relaxed text-white/55" data-i18n="flows2.case2b">
+              AI-to-AI subscriptions: the agent renews its own compute cluster against a hard delegation cap.
+            </p>
+          </div>
+          <div class="relative flex flex-col gap-1 pt-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamPrice">Price</span>
+              <span class="truncate font-mono text-[13px] text-[#a0ffc3]" data-i18n="port4.exCase2PriceV">100 SOL / epoch</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamBilling">Billing</span>
+              <span class="break-words font-mono text-[13px] text-[#00dbe9]" data-i18n="port4.exCase2BillV">the agent renews it automatically</span>
+            </div>
+            <div class="flex items-center gap-1 pt-2 text-[11px] text-[#d8b9ff]/70">
+              <span class="msym text-[14px]" aria-hidden="true">arrow_downward</span>
+              <span data-i18n="port4.exTryIt">Try it in the widget</span>
+            </div>
+          </div>
+        </a>
+
+        <a href="#live-widget" class="group relative flex h-auto min-h-72 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 shadow-lg transition-all hover:-translate-y-0.5 hover:border-[#9945ff]/60">
+          <div class="pointer-events-none absolute top-0 right-0 p-4 opacity-10 transition-opacity group-hover:opacity-30" aria-hidden="true">
+            <span class="msym text-[64px] text-[#a0ffc3]">groups</span>
+          </div>
+          <div class="relative flex flex-col gap-2">
+            <span class="w-fit rounded bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-wider text-[#a0ffc3]" data-i18n="flows2.case3tag">CASE 03 // COMMUNITY</span>
+            <h3 class="font-display pt-2 text-lg font-bold" data-i18n="flows2.case3t">Alpha Telegram &amp; VIP</h3>
+            <p class="line-clamp-3 text-sm leading-relaxed text-white/55" data-i18n="flows2.case3b">
+              Token-gated bot verifies the subscription delegate; access revokes the moment the authorization lapses.
+            </p>
+          </div>
+          <div class="relative flex flex-col gap-1 pt-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamPrice">Price</span>
+              <span class="truncate font-mono text-[13px] text-[#a0ffc3]" data-i18n="port4.exCase3PriceV">0.75 SOL / 30d</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamEnforce">Enforcement</span>
+              <span class="break-words font-mono text-[13px] text-[#00dbe9]" data-i18n="port4.exCase3EnfV">access ends the moment the plan lapses</span>
+            </div>
+            <div class="flex items-center gap-1 pt-2 text-[11px] text-[#d8b9ff]/70">
+              <span class="msym text-[14px]" aria-hidden="true">arrow_downward</span>
+              <span data-i18n="port4.exTryIt">Try it in the widget</span>
+            </div>
+          </div>
+        </a>
+
+        <a href="#live-widget" class="group relative flex h-auto min-h-72 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 shadow-lg transition-all hover:-translate-y-0.5 hover:border-[#9945ff]/60">
+          <div class="pointer-events-none absolute top-0 right-0 p-4 opacity-10 transition-opacity group-hover:opacity-30" aria-hidden="true">
+            <span class="msym text-[64px] text-[#d8b9ff]">newspaper</span>
+          </div>
+          <div class="relative flex flex-col gap-2">
+            <span class="w-fit rounded bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-wider text-[#d8b9ff]" data-i18n="flows2.case4tag">CASE 04 // MEDIA</span>
+            <h3 class="font-display pt-2 text-lg font-bold" data-i18n="flows2.case4t">Web3 deep-dive letter</h3>
+            <p class="line-clamp-3 text-sm leading-relaxed text-white/55" data-i18n="flows2.case4b">
+              Weekly on-chain micropayments. Readers pay only for reports actually published — no cards.
+            </p>
+          </div>
+          <div class="relative flex flex-col gap-1 pt-4">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamPrice">Price</span>
+              <span class="truncate font-mono text-[13px] text-[#a0ffc3]" data-i18n="port4.exCase4PriceV">5 USDC / issue</span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.exParamBilling">Billing</span>
+              <span class="break-words font-mono text-[13px] text-[#00dbe9]" data-i18n="port4.exCase4BillV">charged per published issue</span>
+            </div>
+            <div class="flex items-center gap-1 pt-2 text-[11px] text-[#d8b9ff]/70">
+              <span class="msym text-[14px]" aria-hidden="true">arrow_downward</span>
+              <span data-i18n="port4.exTryIt">Try it in the widget</span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <p class="mt-3 flex min-w-0 items-center gap-2 px-1 font-mono text-[11px] tracking-wider text-white/35 uppercase">
+        <span class="msym text-[14px] text-[#d8b9ff]" aria-hidden="true">info</span>
+        <span data-i18n="port4.exScenarios">Illustrative scenarios — not live listings.</span>
+      </p>
+      <p class="mt-3 flex min-w-0 items-start gap-2 rounded-xl border border-[#ffb020]/30 bg-[#ffb020]/[0.07] p-3 text-xs leading-relaxed text-white/70">
+        <span class="msym mt-0.5 shrink-0 text-[16px] text-[#ffb020]" aria-hidden="true">info</span>
+        <span data-i18n="integ.exDisclaimer">Scenarios and prices above are illustrative examples, not offers or live listings.</span>
+      </p>
+
+      <div class="mt-12 flex min-w-0 flex-col gap-1">
+        <h2 class="font-display flex items-center gap-2 text-xl font-bold tracking-tight">
+          <span class="msym text-[22px] text-[#14f195]" aria-hidden="true">looks_two</span>
+          <span data-i18n="port4.exStep2t">2 · Try the live checkout widget</span>
+        </h2>
+        <p class="text-sm leading-relaxed text-white/55" data-i18n="port4.exStep2Lead">
+          Press Subscribe — the real popup checkout opens, and the observer console beside it logs every step.
+        </p>
+      </div>
+
+      <div class="mt-4 grid items-start gap-6 lg:grid-cols-12">
+        <div
+          id="live-widget"
+          class="flex min-w-0 scroll-mt-24 flex-col gap-3 rounded-2xl border border-[#9945ff]/30 bg-[#151724]/60 p-4 shadow-2xl sm:p-5 lg:col-span-5"
+        >
+          <div class="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
+            <h3 class="font-display flex items-center gap-2 text-lg font-bold">
+              <span class="msym text-[20px] text-[#d8b9ff]" aria-hidden="true">smart_display</span>
+              <span data-i18n="payex.liveTitle">Embedded Checkout Widget</span>
+            </h3>
+            <span
+              class={`shrink-0 rounded bg-[#282934] px-2 py-1 font-mono text-[10px] tracking-wider uppercase ${state.chipClass}`}
+              data-i18n={state.chipKey}
+            >
+              {state.chip}
+            </span>
+          </div>
+          <p
+            class={`rounded-xl px-3 py-2 text-xs leading-relaxed ${
+              widget.found ? "text-white/55" : "border border-[#ff3b69]/30 bg-[#ff3b69]/10 text-[#ffb4ab]"
+            }`}
+            data-i18n={state.hintKey}
+          >
+            {state.hint}
+          </p>
+          <div class="flex flex-col gap-4 rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 shadow-xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#1d1f29] p-4">
+              <div class="flex min-w-40 flex-1 items-center gap-3">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#9945ff] to-[#14f195]">
+                  <span class="msym text-[22px] text-white" aria-hidden="true">{widget.icon}</span>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-display text-[15px] font-bold text-white/95">{widget.title}</p>
+                    {rawPlan === "" && !demoParam && (
+                      <span class="rounded bg-[#282934] px-2 py-0.5 font-mono text-[10px] tracking-wider text-[#d8b9ff] uppercase" data-i18n="flows2.exampleChip">EXAMPLE</span>
+                    )}
+                  </div>
+                  <p class="font-mono text-[11px] text-white/45">
+                    plan: {demoPlan === "" ? "— (pass ?plan=<address>)" : `${demoPlan.slice(0, 12)}… (${CLUSTER})`}
+                  </p>
+                  {widget.merchantLine !== null && <p class="font-mono text-[11px] text-white/45">{widget.merchantLine}</p>}
+                </div>
+              </div>
+              <div class="shrink-0 text-right">
+                <span class="block font-display text-[15px] font-semibold text-[#14f195]">{widget.price}</span>
+                <span class="block font-mono text-[11px] text-white/35">{widget.interval}</span>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3">
+              <p class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="flows2.payerStep">1. Payer checkout</p>
+              <div class="rounded-xl bg-[#1d1f29] p-4 text-center">
+                {
+                  demoPlan === "" ? (
+                    <p class="mt-1 text-sm text-white/55" data-i18n="flows2.noPlan">Add ?plan=&lt;address&gt; to run the live popup checkout.</p>
+                  ) : (
+                    <button
+                      id="live-subscribe"
+                      type="button"
+                      class="btn-primary mt-1 inline-flex cursor-pointer flex-wrap items-center justify-center gap-1 rounded-lg px-6 py-3 text-sm"
+                      data-plan={demoPlan}
+                      data-demo={demoParam ? "1" : "0"}
+                    >
+                      <span data-i18n="flows2.subscribeCta">Subscribe</span>
+                      <span> — {widget.price} {widget.interval}</span>
+                    </button>
+                  )
+                }
+                <p id="live-status" class="mt-2 min-h-5 text-xs text-white/50" role="status"></p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-2 rounded-xl bg-[#1d1f29] p-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm text-white/55" data-i18n="flows2.authzRow">Authorization limit</span>
+                <span class="text-right font-mono text-[13px] text-white/90" data-i18n="flows2.authzVal">1 period (approve-capped)</span>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm text-white/55" data-i18n="flows2.custodyRow">Custody</span>
+                <span class="text-right font-mono text-[13px] text-[#00f0ff]" data-i18n="flows2.custodyVal">none — Model B</span>
+              </div>
+            </div>
+            <p class="flex items-center justify-center gap-2 text-center font-mono text-[11px] text-white/35">
+              <span class="msym text-[14px] text-[#14f195]" aria-hidden="true">lock</span>
+              <span data-i18n="flows2.noDepositHint">No deposit. Funds stay in your wallet until charge day.</span>
+            </p>
+            <p class="text-xs text-white/45">
+              <span data-i18n="flows2.hintEmbedA">Embed it anywhere: </span><span class="font-mono">POST /api/widget/sites</span><span data-i18n="flows2.hintEmbedB">, paste the snippet, done — foreign domains get 403.</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex min-w-0 flex-col gap-4 lg:col-span-7">
+          <div class="flex items-center justify-between gap-2 px-2">
+            <h3 class="font-display flex items-center gap-2 text-lg font-bold">
+              <span class="msym text-[20px] text-[#a0ffc3]" aria-hidden="true">terminal</span>
+              <span data-i18n="payex.consoleTitle">Transaction observer console</span>
+            </h3>
+            <span class="rounded bg-white/[0.05] px-2 py-0.5 font-mono text-[10px] text-white/45" data-i18n="port4.exConsoleBadge">
+              logs only this page — no simulated traffic
+            </span>
+          </div>
+          <div class="flex min-h-[320px] flex-col justify-between rounded-2xl bg-[#0c0e17] p-6 shadow-2xl">
+            <div
+              id="observer-log"
+              class="flex max-h-[380px] flex-col gap-3 overflow-y-auto font-mono text-[13px] leading-[18px] text-white/55"
+              data-demo={demoParam ? "1" : "0"}
+              data-idle={demoParam ? "demo" : "live"}
+              aria-live="polite"
+              {...(demoParam
+                ? { "data-receipt-id": demoReceipt.id, "data-receipt-amount": demoReceipt.amount, "data-receipt-sig": demoReceipt.signature }
+                : {})}
+            >
+              {
+                demoParam ? (
+                  <p>
+                    [DEMO] fixture plan: {demoFixture.title} — {demoFixture.amountUi} {demoFixture.mintSymbol} /{" "}
+                    {demoFixture.periodLabel}
+                    <br />
+                    [DEMO] fixture receipt: {demoReceipt.id} · {demoReceipt.amount} · {demoReceipt.signature}
+                    <br />
+                    [DEMO] click the widget to preview a fixture checkout (no popup, no fetch).
+                  </p>
+                ) : (
+                  <p data-i18n="payex.consoleIdle">
+                    Idle — waiting for your click in the widget. This console only reflects this page: button state, popup
+                    result, and signature. No websocket, no simulated traffic.
+                  </p>
+                )
+              }
+            </div>
+            <div class="mt-4 flex flex-col gap-3 rounded-xl bg-[#191b25]/50 p-4">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="flows2.sigState">INTERNAL SIGNATURE STATE</span>
+                <span class="font-mono text-[11px] text-[#00f0ff]" data-i18n="flows2.sigIdle">IDLE // AWAITING USER ACTION</span>
+              </div>
+              <dl class="grid grid-cols-1 gap-2 font-mono text-[11px] min-[440px]:grid-cols-2 sm:grid-cols-3">
+                <div class="flex flex-col rounded bg-[#1d1f29] p-2.5">
+                  <dt class="text-white/35" data-i18n="flows2.instr1">INSTR 1</dt>
+                  <dd class="truncate text-emerald-200/90">spl_token::approve</dd>
+                </div>
+                <div class="flex flex-col rounded bg-[#1d1f29] p-2.5">
+                  <dt class="text-white/35" data-i18n="flows2.instr2">INSTR 2</dt>
+                  <dd class="truncate text-emerald-200/90">program::subscribe</dd>
+                </div>
+                <div class="flex flex-col rounded bg-[#1d1f29] p-2.5">
+                  <dt class="text-white/35" data-i18n="flows2.delegLabel">DELEGATION</dt>
+                  <dd class="truncate text-white/70" data-i18n-title="flows2.delegHint" title="spl_token delegate — per subscriber wallet; reading it needs a connected wallet.">—</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-12 flex min-w-0 flex-col gap-1">
+        <h2 class="font-display flex items-center gap-2 text-xl font-bold tracking-tight">
+          <span class="msym text-[22px] text-[#00dbe9]" aria-hidden="true">looks_3</span>
+          <span data-i18n="port4.exStep3t">3 · Ship it in 3 lines</span>
+        </h2>
+        <p class="text-sm leading-relaxed text-white/55" data-i18n="port4.exStep3Lead">
+          These are real endpoints — curl them, or paste the snippet on any site.
+        </p>
+      </div>
+
+      <div class="mt-4 grid gap-6 rounded-2xl border border-white/[0.08] bg-[#191b25] p-6 [&>*]:min-w-0 lg:grid-cols-2 lg:p-8">
+        <div>
+          <h3 class="font-display text-2xl font-bold tracking-tight" data-i18n="payex.codeTitle">
+            3 lines of code. Zero boilerplate.
+          </h3>
+          <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="payex.codeLead">
+            No backend cron, no escrow, no custodial vault. Paste the snippet, bind your domain, and the popup handles
+            approve + subscribe in one transaction.
+          </p>
+          <ul class="mt-3 list-disc space-y-1 pl-5 text-[13px] text-white/60">
+            <li data-i18n="payex.codeNote1">No backend cron — the contract charges one period per transaction.</li>
+            <li data-i18n="payex.codeNote2">No escrow — funds stay in the subscriber wallet until charge day.</li>
+            <li data-i18n="payex.codeNote3">Popup checkout stops at 403 on foreign domains.</li>
+          </ul>
+        </div>
+        <div class="flex flex-col gap-4 rounded-xl bg-[#0c0e17] p-6 shadow-2xl">
+          <div class="flex items-center justify-between rounded-lg bg-[#282934]/30 px-3 py-2">
+            <div class="flex items-center gap-2">
+              <span class="h-3 w-3 rounded-full bg-[#93000a]"></span>
+              <span class="h-3 w-3 rounded-full bg-[#373944]"></span>
+              <span class="h-3 w-3 rounded-full bg-[#00ec91]"></span>
+              <span class="ml-2 font-mono text-[11px] text-white/35">CheckoutWidget.html</span>
+            </div>
+          </div>
+          <pre class="whitespace-pre-wrap break-words p-2 font-mono text-[13px] leading-relaxed text-white/85">{`<script src="/widget.js"></script>
+<button id="sub">Subscribe</button>
+<script>SolhackPay.subscribe({ plan: "<PLAN>" }).then(unlock);</script>`}</pre>
+          <div class="flex items-center justify-between gap-3 rounded-lg bg-[#282934]/20 px-3 py-2">
+            <span class="shrink-0 font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="flows2.installLabel">INSTALLATION</span>
+            <span class="min-w-0 break-words text-right font-mono text-[13px] text-[#14f195]" data-i18n="flows2.installVal">POST /api/widget/sites → paste snippet</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-xs leading-relaxed text-white/50">
+        <span class="font-semibold text-white/75" data-i18n="flows2.legendLabel">Live vs mocked:</span>
+        <span data-i18n="payex.legendLive">Live: the widget button, the popup checkout, and the observer state after you click.</span>
+        <span data-i18n="payex.legendMock">Mock: nothing on this page is simulated — case cards describe mechanics, numbers come only from your ?plan= account.</span>
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<script is:inline src="/widget.js"></script>
+<script>
+  import { isDemoMode } from "../lib/demo.js";
+  import "../lib/i18n-flows2.js";
+  import "../lib/i18n-pay.js";
+  import "../lib/i18n-port4.js";
+  import "../lib/i18n-proofs.js";
+
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (isDemoMode() && !qs.has("demo")) {
+      qs.set("demo", "1");
+      window.location.replace(`${window.location.pathname}?${qs.toString()}`);
+    }
+  } catch {
+    /* private mode — session-only */
+  }
+
+  function logLine(text: string): void {
+    const log = document.getElementById("observer-log");
+    if (log === null) return;
+    const p = document.createElement("p");
+    p.textContent = text;
+    log.appendChild(p);
+  }
+
+  const btn = document.getElementById("live-subscribe") as HTMLButtonElement | null;
+  const plan = btn instanceof HTMLElement ? (btn.dataset.plan ?? "") : "";
+  const demo = btn instanceof HTMLElement && btn.dataset.demo === "1";
+  const receiptId = document.getElementById("observer-log")?.dataset.receiptId ?? "";
+  const receiptSig = document.getElementById("observer-log")?.dataset.receiptSig ?? "";
+
+  // Case cards are anchors to #live-widget (step 1 → step 2 of the flow).
+  // Upgrade the native jump to a smooth scroll; without JS the anchor still works.
+  for (const card of document.querySelectorAll<HTMLAnchorElement>('#use-cases-grid a[href="#live-widget"]')) {
+    card.addEventListener("click", (e) => {
+      const target = document.getElementById("live-widget");
+      if (target === null) return; // native anchor jump
+      e.preventDefault();
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  const isPl = (): boolean => document.documentElement.lang === "pl";
+  const T = {
+    opening: (): string => (isPl() ? "Otwieranie checkoutu…" : "Opening checkout…"),
+    widgetFail: (): string => (isPl() ? "Widget się nie wczytał." : "Widget failed to load."),
+    demoStatus: (id: string): string =>
+      isPl() ? `DEMO checkout — fikcyjny paragon ${id} (bez popupu, bez fetcha).` : `DEMO checkout — fixture receipt ${id} (no popup, no fetch).`,
+    demoLog: (sig: string): string =>
+      isPl() ? `[DEMO] fikcyjne zatwierdzenie z limitem 1 okresu → ${sig}` : `[DEMO] fixture approval capped at 1 period → ${sig}`,
+    widgetFailLog: (): string => (isPl() ? "Widget się nie wczytał." : "Widget failed to load."),
+    openingLog: (): string => (isPl() ? "Otwieranie popupu checkout…" : "Opening popup checkout…"),
+    paidLog: (sig: string): string => (isPl() ? "Zapłacono: " + sig : "Paid: " + sig),
+  };
+
+  btn?.addEventListener("click", async function () {
+    const status = document.getElementById("live-status");
+    if (demo || (isDemoMode() && plan !== "")) {
+      if (status !== null) status.textContent = T.demoStatus(receiptId);
+      logLine(T.demoLog(receiptSig));
+      return;
+    }
+    const w = window as unknown as {
+      SolhackPay?: { subscribe: (opts: { plan: string }) => Promise<string> };
+    };
+    if (w.SolhackPay === undefined) {
+      if (status !== null) status.textContent = T.widgetFail();
+      logLine(T.widgetFailLog());
+      return;
+    }
+    // Single flight: the button stays disabled until the popup settles, so a
+    // double-click can never open two checkouts (pattern: lib/pay-checkout.ts).
+    if (btn !== null) btn.disabled = true;
+    if (status !== null) status.textContent = T.opening();
+    logLine(T.openingLog());
+    try {
+      const sig = await w.SolhackPay.subscribe({ plan: plan });
+      if (status !== null) status.textContent = T.paidLog(sig);
+      logLine(T.paidLog(sig));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Checkout closed.";
+      if (status !== null) status.textContent = msg;
+      logLine(msg);
+    } finally {
+      if (btn !== null) btn.disabled = false;
+    }
+  });
+</script>

@@ -1,0 +1,352 @@
+---
+import Layout from "../layouts/Layout.astro";
+import BlinkBuilder from "../components/BlinkBuilder.svelte";
+import { DEMO_PLANS } from "../lib/demo.js";
+import { SITE_URL } from "../lib/blinks.js";
+
+// Query-dependent (?demo=1 switches the fixture/template variant) → always
+// SSR, never prerendered: a prerendered build bakes one variant at build time
+// and the other branch becomes dead code (Astro.url.searchParams is a
+// build-time artifact there).
+export const prerender = false;
+// Output depends on ?demo=1 → no browser/edge HTML caching.
+Astro.response.headers.set("Cache-Control", "no-store");
+
+// Demo mode (?demo=1) shows the integration URLs for the DEMO_PLANS[0]
+// fixture instead of the <PLAN> template, per the global demo rule.
+// Without ?demo=1 the template stays clearly a template: the endpoint JSON
+// link renders as disabled (a literal <PLAN> URL can never resolve), while
+// the live clickable URLs come from the builder island.
+const demoParam = Astro.url.searchParams.get("demo") === "1";
+const demoFixture = DEMO_PLANS[0];
+if (demoFixture === undefined) throw new Error("DEMO_PLANS fixture missing.");
+const integPlan = demoParam ? demoFixture.address : "<PLAN>";
+// Canonical SITE_URL (PUBLIC_SITE_URL), not the request origin: this URL is
+// meant to be pasted into wallets, so it must be identical no matter how the
+// Host header is forwarded behind the tunnel/proxy.
+const integAction = `${SITE_URL}/api/actions/subscribe?plan=${encodeURIComponent(integPlan)}`;
+// Primary shareable form: wallets consume the solana-action: URI directly.
+const integBlink = `solana-action:${integAction}`;
+---
+
+<Layout title="Blinks" description="Build a Blink for every action: subscribe, cancel, charge, new plan.">
+  <section class="relative mx-auto max-w-7xl overflow-hidden px-4 pt-12 pb-12 sm:px-6">
+    <div class="pointer-events-none absolute -top-32 right-10 h-96 w-96 rounded-full bg-[#9945ff]/10 blur-[120px]"></div>
+    <div class="pointer-events-none absolute top-1/2 -left-32 h-80 w-80 rounded-full bg-[#14f195]/10 blur-[100px]"></div>
+
+    <div class="relative flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-[#282934] px-2.5 py-0.5 font-mono text-[11px] tracking-widest text-[#a0ffc3] uppercase">
+          <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-[#a0ffc3]"></span>
+          <span data-i18n="port4.blinkPill">Solana Actions & Blinks</span>
+        </span>
+        <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="flows2.specBadge">// SPEC: SOLANA ACTIONS</span>
+      </div>
+      <p class="eyebrow text-white/40" data-i18n="blink.eyebrow">solana actions · srfc-31</p>
+      <h1 class="font-display mt-2 max-w-4xl text-3xl font-bold tracking-tight sm:text-4xl">
+        <span data-i18n="flows2.blinkH1a">Blinks — pay from</span>
+        <span class="bg-gradient-to-r from-[#9945ff] via-[#00dbe9] to-[#14f195] bg-clip-text text-transparent" data-i18n="flows2.blinkH1b">X / Discord</span>
+      </h1>
+      <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/55 sm:text-[15px]">
+        <span data-i18n="blink.leadA">Turn any subscription into a link people can pay from X or Discord — no visit to this site needed. Every</span>
+        <span class="font-mono text-xs">/api/actions/*</span>
+        <span data-i18n="blink.leadB">endpoint speaks the Actions protocol (GET metadata → POST unsigned tx → wallet signs). Paste the URL as</span>
+        <span class="font-mono text-xs">solana-action:…</span>
+        <span data-i18n="blink.leadC">on X or paste it in any wallet — subscribing happens wherever your users already are.</span>
+      </p>
+    </div>
+
+    <div class="relative mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12 [&>*]:min-w-0">
+      <div class="flex min-w-0 flex-col gap-6 xl:col-span-7">
+        <BlinkBuilder client:load />
+        <div class="rounded-2xl border border-white/[0.08] bg-[#191b25] p-5 text-sm leading-relaxed text-white/55 shadow-xl">
+          <p class="font-semibold text-white/85" data-i18n="blink.noteTitle">Registry & chain</p>
+          <ul class="mt-2 list-disc space-y-1 pl-5">
+            <li><span class="font-mono text-xs">public/actions.json</span> <span data-i18n="blink.note1a">maps</span> <span class="font-mono text-xs">/api/actions/**</span> <span data-i18n="blink.note1b">to</span> <span class="font-mono text-xs">solana:devnet</span> <span data-i18n="blink.note1c">— swap the chain id for mainnet.</span></li>
+            <li><span data-i18n="blink.note2a">Wallets consume</span> <span class="font-mono text-xs">solana-action:</span> <span data-i18n="blink.note2b">URLs directly — no gateway needed. Full unfurl on X still needs a registered actions.json entry.</span></li>
+            <li><span data-i18n="blink.note3a">A</span> <span class="font-mono text-xs">subscribe</span> <span data-i18n="blink.note3b">POST always bundles an</span> <span class="font-mono text-xs">approve</span> <span data-i18n="blink.note3c">capped at one period — a Blink can never authorize more.</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flex min-w-0 flex-col gap-6 xl:sticky xl:top-28 xl:col-span-5">
+        <div class="flex items-center justify-between">
+          <p class="flex items-center gap-2 font-display text-[15px] font-semibold text-white/90">
+            <span class="h-2 w-2 animate-ping rounded-full bg-[#00f0ff]"></span>
+            <span data-i18n="port4.feedTitle">Live Blink feed simulator</span>
+          </p>
+          <span class="rounded bg-[#282934] px-2 py-0.5 font-mono text-[11px] text-[#00f0ff]" data-i18n="port4.feedBadge">X-feed preview</span>
+        </div>
+
+        <div class="relative overflow-hidden rounded-2xl bg-[#0c0e17] p-5 shadow-2xl">
+          <div class="flex items-center gap-3 pb-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-[#9945ff] to-[#14f195] font-display text-sm font-bold text-white">S</div>
+            <div class="flex min-w-0 flex-col">
+              <div class="flex items-center gap-1.5">
+                <span class="truncate font-display text-[15px] font-semibold text-white/95">OnchainSUB Demo</span>
+                <span class="font-mono text-[11px] text-white/35" data-i18n="integ.feedPreview">Preview — connect your X account</span>
+              </div>
+              <span class="text-xs text-white/40" data-i18n="flows2.feedTime">pinned · native in Phantom &amp; Solflare</span>
+            </div>
+          </div>
+          <p class="mb-3 text-sm leading-relaxed text-white/85" data-i18n="flows2.feedBody">
+            Subscribe in one click from this post — no site visit. The wallet signs the same one-period-capped transaction as the popup.
+          </p>
+          <div class="overflow-hidden rounded-xl bg-[#191b25] shadow-lg transition-all hover:bg-[#1d1f29]">
+            <div class="relative h-32 w-full overflow-hidden bg-[#282934]">
+              <div class="absolute inset-0 bg-gradient-to-t from-[#191b25] via-[#9945ff]/20 to-transparent"></div>
+              <div class="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-[#0c0e17]/80 px-2.5 py-1 backdrop-blur-md">
+                <span class="font-mono text-[11px] tracking-wider text-[#14f195] uppercase" data-i18n="port4.zeroCustody">Zero Custody</span>
+              </div>
+              <div class="absolute bottom-2 left-3">
+                <span class="rounded bg-[#32343f]/90 px-2 py-0.5 font-mono text-[11px] tracking-wider text-[#d8b9ff] uppercase">subscriptionssol</span>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3 p-4">
+              <div class="min-w-0">
+                <h3
+                  id="feed-card-title"
+                  class="font-display text-[15px] font-bold text-white/95"
+                  data-i18n-title="flows2.feedIdleHint"
+                  title="Fills from the live GET metadata — click Preview action (GET) in the builder."
+                >—</h3>
+                <p
+                  id="feed-card-desc"
+                  class="mt-1 line-clamp-2 text-xs text-white/55"
+                  data-i18n-title="flows2.feedIdleHint"
+                  title="Fills from the live GET metadata — click Preview action (GET) in the builder."
+                >—</p>
+              </div>
+              <div class="flex items-center justify-between gap-2 rounded-lg bg-[#0c0e17] px-3 py-2">
+                <span class="font-mono text-[11px] tracking-wider text-white/40 uppercase" data-i18n="port4.rateLabel">Recurring rate:</span>
+                <span id="feed-card-price" class="font-mono text-[13px] text-[#14f195]">—</span>
+              </div>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <!-- Primary share = copy the solana-action: URL (wallets consume
+                     it directly, no gateway); secondary = plain GET of our own
+                     endpoint, which renders the action metadata JSON. -->
+                <button
+                  id="copy-blink-url-2"
+                  type="button"
+                  class="btn-primary flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-center text-sm"
+                >
+                  <span class="msym text-[16px]" aria-hidden="true">content_copy</span>
+                  <span data-i18n="blinkx.copyUrl">Copy Blink URL</span>
+                  <!-- Local "Copied" feedback: the shared status line sits far
+                       below the feed card, so confirm right at the button. -->
+                  <span id="copy-blink-url-2-check" class="hidden shrink-0 items-center gap-0.5 text-[#14f195]">
+                    <span class="msym text-[16px]" aria-hidden="true">check</span>
+                    <span data-i18n="blinkx.copied">Copied.</span>
+                  </span>
+                </button>
+                <a
+                  id="feed-json-link"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-disabled="true"
+                  class="btn-ghost flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-center text-sm opacity-50 pointer-events-none cursor-not-allowed"
+                  data-i18n-title="flows2.feedNotReady"
+                  title="Fill the builder form — the link enables once the endpoint is complete."
+                >
+                  <span class="msym text-[16px]" aria-hidden="true">data_object</span>
+                  <span data-i18n="flows2.openJson">Open endpoint JSON</span>
+                </a>
+              </div>
+              <div class="flex items-center justify-between pt-1 font-mono text-[11px] text-white/35">
+                <span>action.version: 2.1</span>
+                <span class="flex items-center gap-1 text-white/55">
+                  <span class="msym text-[13px] text-[#00dbe9]" aria-hidden="true">lock</span>
+                  <span data-i18n="flows2.securedBy">Secured by the Actions spec</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#191b25] p-4">
+          <div class="rounded-lg bg-[#282934] p-2.5 text-[#d8b9ff]">
+            <span class="msym text-[24px]" aria-hidden="true">verified_user</span>
+          </div>
+          <div class="flex min-w-0 flex-col">
+            <span class="font-display text-[14px] font-semibold text-white/90" data-i18n="port4.validT">Actions pre-validation</span>
+            <p class="text-xs text-white/55" data-i18n="port4.validB">Endpoints serve CORS headers Access-Control-Allow-Origin: * so X renders the card.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="relative mt-6 grid gap-6 rounded-2xl border border-white/[0.08] bg-[#191b25] p-5 shadow-xl sm:p-6 lg:grid-cols-2">
+      <div>
+        <div class="flex items-center justify-between">
+          <h2 class="font-display text-xl font-bold tracking-tight" data-i18n="blinkx.integTitle">3-line integration</h2>
+          <span class="font-mono text-[11px] tracking-wider text-white/35 uppercase" data-i18n="port4.step3s">STEP 03 / 03</span>
+        </div>
+        <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n="blinkx.integLead">
+          Render the subscribe Action anywhere. The URL below is live for the plan currently selected in the builder —
+          paste the solana-action: URL into any wallet and it signs the same one-period-capped transaction as the popup.
+        </p>
+        {demoParam && <p class="chip-pastdue mt-2 w-fit" data-i18n="flows2.demoChip">DEMO — fixture plan, no fetch.</p>}
+        {!demoParam && <p class="mt-2 font-mono text-[11px] text-white/40" data-i18n="flows2.templateNote">Template URL — add ?demo=1 for a fixture link, or use the builder above for a live one.</p>}
+        <div class="mt-4 rounded-xl bg-[#1d1f29] p-4 text-sm">
+          <p class="font-semibold text-white/85" data-i18n="blinkx.checkTitle">Ship checklist</p>
+          <ul class="mt-2 space-y-1.5 text-[13px] text-white/60">
+            <li>✓ <span data-i18n="blinkx.check1">Wallets (Phantom, Solflare) consume the solana-action: URL directly — no gateway, no registry entry.</span></li>
+            <li>✓ <span data-i18n="blinkx.check2">Discord embed renders the same Action metadata (title, description, icon).</span></li>
+            <li>✓ <span data-i18n="blinkx.check3">Full unfurl on X with your own domain needs a registered actions.json entry.</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="min-w-0 rounded-xl bg-[#0c0e17] p-4">
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-[11px] tracking-wider text-[#00f0ff] uppercase" data-i18n="port4.uriSchema">solana-action URI schema:</span>
+          <span class="font-mono text-[11px] text-white/35" data-i18n="port4.getpost">GET / POST payload</span>
+        </div>
+        <pre id="blink-integ-code" class="mt-2 overflow-x-auto font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap text-emerald-200/90">{`GET  ${integAction}   # metadata
+POST ${integAction}   # { account } → unsigned tx
+${integBlink}   # paste into any wallet`}</pre>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            id="copy-blink-url"
+            type="button"
+            class="btn-ghost cursor-pointer rounded-lg px-4 py-2 text-sm"
+            data-i18n="blinkx.copyUrl"
+          >
+            Copy Blink URL
+          </button>
+          <!-- Plain GET of our own endpoint: the browser renders the action
+               metadata JSON — no third-party preview gateway involved. -->
+          {demoParam ? (
+            <a href={integAction} target="_blank" rel="noreferrer" class="btn-ghost rounded-lg px-4 py-2 text-sm" data-i18n="flows2.jsonShort">
+              endpoint JSON ↗
+            </a>
+          ) : (
+            <span
+              aria-disabled="true"
+              class="btn-ghost inline-block cursor-not-allowed rounded-lg px-4 py-2 text-sm opacity-50"
+              data-i18n="flows2.jsonShort"
+              data-i18n-title="flows2.templateNote"
+              title="Template URL — add ?demo=1 for a fixture link, or use the builder above for a live one."
+            >
+              endpoint JSON ↗
+            </span>
+          )}
+        </div>
+        <p id="copy-blink-status" class="mt-2 min-h-4 font-mono text-[11px] text-white/40" role="status"></p>
+      </div>
+    </div>
+
+    <p class="relative mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-xs leading-relaxed text-white/50">
+      <span class="font-semibold text-white/75" data-i18n="flows2.legendTitle">What is live vs mocked on this page</span>
+      <span data-i18n="flows2.legendLive">Live: the builder endpoint, the GET metadata preview, the copy buttons, and the endpoint JSON link — all run against this deployment.</span>
+      <span data-i18n="flows2.legendMock">Mock: the X post frame around the card (avatar, post text) is a static prop. The card itself renders live GET metadata from this deployment, and its buttons only copy the solana-action: URL and open the endpoint JSON — no signature is ever simulated.</span>
+    </p>
+  </section>
+</Layout>
+
+<script>
+  import "../lib/i18n-flows2.js";
+  import "../lib/i18n-pay.js";
+  import "../lib/i18n-proofs.js";
+
+  interface BlinkBuilderState {
+    title: string | null;
+    description: string | null;
+    price: string;
+    blink: string;
+    endpoint: string;
+    ready: boolean;
+  }
+
+  // The X-feed card above is static markup; the builder island (separate
+  // Svelte mount) publishes its state over a DOM event. Title/description
+  // come from the real GET metadata; price from the form; the copy button
+  // carries the solana-action: URL and the JSON link enables only once the
+  // endpoint has all parameters.
+  let latest: BlinkBuilderState | null = null;
+
+  function applyFeed(s: BlinkBuilderState): void {
+    const title = document.getElementById("feed-card-title");
+    const desc = document.getElementById("feed-card-desc");
+    const price = document.getElementById("feed-card-price");
+    const link = document.getElementById("feed-json-link");
+    if (title !== null) title.textContent = s.title ?? "—";
+    if (desc !== null) desc.textContent = s.description ?? "—";
+    if (price !== null) price.textContent = s.price;
+    if (link !== null) {
+      if (s.ready) {
+        link.setAttribute("href", s.endpoint);
+        link.removeAttribute("aria-disabled");
+        link.removeAttribute("title");
+        link.classList.remove("pointer-events-none", "opacity-50", "cursor-not-allowed");
+      } else {
+        link.removeAttribute("href");
+        link.setAttribute("aria-disabled", "true");
+        link.setAttribute("title", link.getAttribute("data-i18n-title") ?? "");
+        link.classList.add("pointer-events-none", "opacity-50", "cursor-not-allowed");
+      }
+    }
+  }
+
+  document.addEventListener("blinkbuilder:state", (e) => {
+    latest = (e as CustomEvent<BlinkBuilderState>).detail;
+    if (latest !== null) applyFeed(latest);
+  });
+  // Ask the island to re-publish in case its initial dispatch ran before
+  // this listener existed (hydration vs module-script race).
+  document.dispatchEvent(new CustomEvent("blinkbuilder:sync"));
+
+  const isPl = (): boolean => document.documentElement.lang === "pl";
+  const T = {
+    copied: (): string => (isPl() ? "Skopiowano." : "Copied."),
+    clipBlocked: (): string =>
+      isPl() ? "Schowek zablokowany — skopiuj ręcznie." : "Clipboard blocked — copy manually.",
+    formIncomplete: (): string =>
+      isPl()
+        ? "Formularz niekompletny — najpierw uruchom Podgląd (GET)."
+        : "Form incomplete — run Preview (GET) in the builder first.",
+  };
+
+  /** Writes the text to the clipboard; true on success, false when blocked. */
+  async function copyIntegText(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Copies the whole integration template block (GET/POST + solana-action lines).
+  document.getElementById("copy-blink-url")?.addEventListener("click", async () => {
+    const code = document.getElementById("blink-integ-code");
+    const status = document.getElementById("copy-blink-status");
+    const text = (code?.textContent ?? "").trim();
+    if (text === "") return;
+    const ok = await copyIntegText(text);
+    if (status !== null) status.textContent = ok ? T.copied() : T.clipBlocked();
+  });
+
+  // Copies the LIVE solana-action: URL from the builder state (not the template).
+  let checkTimer = 0;
+  document.getElementById("copy-blink-url-2")?.addEventListener("click", async () => {
+    const status = document.getElementById("copy-blink-status");
+    const check = document.getElementById("copy-blink-url-2-check");
+    if (latest === null || !latest.ready) {
+      if (status !== null) status.textContent = T.formIncomplete();
+      return;
+    }
+    const ok = await copyIntegText(latest.blink);
+    if (status !== null) status.textContent = ok ? T.copied() : T.clipBlocked();
+    // Confirm at the button itself for 2 s — the shared status line sits two
+    // screens below the feed card, so the clicker would never see it.
+    if (ok && check !== null) {
+      check.classList.remove("hidden");
+      check.classList.add("inline-flex");
+      window.clearTimeout(checkTimer);
+      checkTimer = window.setTimeout(() => {
+        check.classList.add("hidden");
+        check.classList.remove("inline-flex");
+      }, 2000);
+    }
+  });
+</script>

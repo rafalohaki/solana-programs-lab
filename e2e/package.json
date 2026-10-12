@@ -1,0 +1,20 @@
+{
+  "name": "@solhack/e2e",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Playwright end-to-end against compose stack on :3725.",
+  "scripts": {
+    "test": "playwright test",
+    "web:check": "cd .. && bun run web:check",
+    "web:build": "cd .. && bun run web:build",
+    "backend:check": "cd .. && bun run backend:check",
+    "actions:typecheck": "cd .. && bun run actions:typecheck"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}

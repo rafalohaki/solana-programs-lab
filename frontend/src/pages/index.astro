@@ -1,0 +1,649 @@
+---
+import Layout from "../layouts/Layout.astro";
+import PlansGrid from "../components/PlansGrid.svelte";
+import ProofsTable from "../components/ProofsTable.svelte";
+import ActivityFeed from "../components/ActivityFeed.svelte";
+import AgentStrip from "../components/AgentStrip.svelte";
+import JudgeFaq from "../components/JudgeFaq.svelte";
+import DelegateFlow from "../components/art/DelegateFlow.svelte";
+import Stat from "../components/Stat.svelte";
+import { CLUSTER, connection, fetchMintDecimals, formatPeriod, formatTokenAmount, PROGRAM_ID, shortAddr } from "../lib/chain.js";
+import { fetchPlansCached } from "../lib/plansCache.js";
+import { blinkUrl, subscribeActionUrl } from "../lib/blinks.js";
+import { DEVNET_USDC_MINT } from "../lib/mints.js";
+
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+// Hero micro-proof: real program id from env (never invented) + cluster-aware
+// Explorer deep link, shortened 4…4 like every other address on the page.
+const programIdFull = PROGRAM_ID.toBase58();
+const programIdShort = shortAddr(PROGRAM_ID);
+const programExplorerHref =
+  CLUSTER === "mainnet-beta"
+    ? `https://explorer.solana.com/address/${programIdFull}`
+    : `https://explorer.solana.com/address/${programIdFull}?cluster=${CLUSTER}`;
+
+// SSR HTML embeds live chain reads (refreshed by the 60 s server cache and the
+// client islands): no browser/edge HTML caching.
+Astro.response.headers.set("Cache-Control", "no-store");
+
+let planCount = "–";
+let merchantCount = "–";
+// `blink` is the primary shareable solana-action: URL (wallets consume it
+// directly); `endpoint` is the plain https GET whose JSON renders in a browser.
+let preview: {
+  amount: string;
+  period: string;
+  merchant: string;
+  merchantFull: string;
+  blink: string;
+  endpoint: string;
+} | null = null;
+try {
+  const conn = connection();
+  const plans = await fetchPlansCached();
+  planCount = plans.length.toString();
+  merchantCount = new Set(plans.map((p) => p.merchant.toBase58()).values()).size.toString();
+  const first = plans[0];
+  if (first) {
+    const mintB58 = first.mint.toBase58();
+    const decimals = await fetchMintDecimals(conn, first.mint);
+    const symbol = mintB58 === DEVNET_USDC_MINT ? "USDC" : mintB58 === WSOL_MINT ? "SOL" : shortAddr(first.mint);
+    const endpoint = subscribeActionUrl(first.address.toBase58(), mintB58, first.amount.toString());
+    preview = {
+      amount: `${formatTokenAmount(first.amount, decimals)} ${symbol}`,
+      period: formatPeriod(first.periodSeconds, "en"),
+      merchant: shortAddr(first.merchant),
+      // Full address for the tooltip (address-poisoning copy-verify).
+      merchantFull: first.merchant.toBase58(),
+      blink: blinkUrl(endpoint),
+      endpoint,
+    };
+  }
+} catch {
+  // Public RPCs are flaky — the PlansGrid island loads data client-side anyway.
+}
+---
+
+<Layout title="On-chain subscriptions" description="Zero-custody recurring payments on Solana: live on-chain plans, one-period SPL delegates and Blinks checkout.">
+  <!-- Hero -->
+  <section class="relative overflow-hidden py-16 text-center sm:py-24">
+    <!-- Backdrop: the single allowed accent mesh + SVG grain (both halved). -->
+    <div class="hero-mesh pointer-events-none absolute inset-0" aria-hidden="true"></div>
+    <div class="hero-noise pointer-events-none absolute inset-0" aria-hidden="true"></div>
+    <div class="relative mx-auto w-full max-w-6xl px-6">
+    <!-- The "Solana" accent already leads this chip — the badge text must not
+         repeat it, or the pill overflows a 390px viewport (px-4 container). -->
+    <p class="eyebrow hero-in relative inline-flex items-center gap-2.5 rounded-full bg-[#282934]/90 px-4 py-1.5 text-white/60">
+      <span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[#14f195]"></span>
+      <span class="text-[#14f195]">Solana</span>
+      <span class="text-xs text-white/25">•</span>
+      <span data-i18n="hero.badge">recurring payments on-chain</span>
+    </p>
+    <h1 class="font-display hero-in relative mx-auto mt-6 max-w-4xl text-[clamp(2.25rem,6vw,3.5rem)] leading-[1.1] font-bold tracking-tight text-balance" style="animation-delay:60ms">
+      <span data-i18n="hero.title">Subscriptions that live</span>
+      <span class="grad-text" data-i18n="hero.titleAccent">on-chain</span>
+    </h1>
+    <p class="hero-in relative mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-white/60" style="animation-delay:120ms">
+      <span data-i18n="hero.leadA">You approve a single </span>
+      <span class="mx-0.5 rounded bg-[#282934] px-1.5 py-0.5 font-mono text-sm text-[#d8b9ff]">SPL delegate</span>
+      <span data-i18n="hero.leadB"> capped at one period — the contract pulls exactly one charge per period, and funds stay in your wallet until then.</span>
+    </p>
+    <div class="hero-in relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row" style="animation-delay:180ms">
+      <a
+        href="#plany"
+        class="btn-stitch inline-flex w-full items-center justify-center gap-2 rounded-lg px-7 py-3.5 text-sm sm:w-auto"
+      >
+        <span class="msym text-[18px]" aria-hidden="true">explore</span>
+        <span data-i18n="hero.browse">Browse plans</span>
+      </a>
+      <a
+        href="/merchant"
+        class="btn-secondary inline-flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm sm:w-auto"
+      >
+        <span class="msym text-[18px] text-[#d8b9ff]" aria-hidden="true">add_circle</span>
+        <span data-i18n="hero.create">Create a plan as merchant</span>
+      </a>
+    </div>
+    <!-- Micro-proof under the CTAs: live cluster + real program id (env). -->
+    <p class="hero-in relative mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-mono text-xs text-white/45" style="animation-delay:240ms">
+      <span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[#14f195]" aria-hidden="true"></span>
+      <span data-i18n="proofs.heroLive">Live on Solana</span>
+      <span>{CLUSTER}</span>
+      <span aria-hidden="true">·</span>
+      <span>Program:</span>
+      <a
+        href={programExplorerHref}
+        target="_blank"
+        rel="noreferrer"
+        class="text-[#7df4ff] transition-colors hover:text-[#00f0ff] hover:underline"
+        title={programIdFull}>{programIdShort}</a
+      >
+    </p>
+
+    <!-- Live on-chain metrics bar (full-width, rich cards) -->
+    <div class="hero-in relative mt-12 grid grid-cols-1 gap-4 text-left sm:grid-cols-2 lg:grid-cols-4" style="animation-delay:300ms">
+      <Stat
+        id="stat-plans"
+        value={planCount}
+        labelKey="stats.plansTop"
+        label="Plan count"
+        subKey="stats.plansLabel"
+        sub="plans on-chain"
+        hintKey="stats.plansHint"
+        hint="getProgramAccounts · live"
+        captionIcon="terminal"
+        tone="grape"
+        live
+      />
+      <Stat
+        value="1 tx"
+        labelKey="stats.txTop"
+        label="Cost per charge"
+        icon="bolt"
+        subKey="stats.txLabel"
+        sub="per period"
+        hintKey="stats.txHint"
+        hint="1 tx per period · 0.4% protocol fee + ~0.000005 SOL network fee"
+        captionIcon="sync_alt"
+        tone="mint"
+      />
+      <Stat
+        value="0"
+        labelKey="stats.custodyTop"
+        label="Security model"
+        icon="lock_open"
+        subKey="stats.custodyLabel"
+        sub="custody"
+        hintKey="stats.custodyHint"
+        hint="funds stay in your ATA"
+        captionIcon="wallet"
+        tone="cyan"
+      />
+      <Stat
+        value="blink‑ready"
+        valueIcon="bolt"
+        labelKey="stats.blinkTop"
+        label="Blinks integration"
+        icon="share"
+        subKey="stats.blinkHint"
+        sub="4 actions · self-hosted"
+        hintKey="stats.blinkCaption"
+        hint="Compatible with Twitter/X"
+        captionIcon="public"
+        tone="grape"
+      />
+    </div>
+    </div>
+  </section>
+
+  <!-- Architecture (template: centered chip + 3 step cards with code footers) -->
+  <section class="border-t border-white/5 py-16 sm:py-24" aria-labelledby="arch-title">
+    <div class="mx-auto w-full max-w-6xl px-6">
+    <div class="mx-auto mb-8 max-w-2xl text-center">
+      <p class="eyebrow mb-3 inline-flex items-center rounded-lg bg-[#1d1f29] px-3 py-1 text-[#d8b9ff]" data-i18n="arch.eyebrow">
+        Zero Custody · SPL Delegate Engine
+      </p>
+      <h2 id="arch-title" class="font-display text-h2 font-bold tracking-tight" data-i18n="arch.title">
+        How the OnchainSUB architecture works
+      </h2>
+      <p class="text-lead mx-auto mt-3 max-w-2xl leading-relaxed text-white/55" data-i18n="arch.lead">
+        Built on the native delegation mechanism of the Solana token program — no funds are ever frozen in a vault.
+      </p>
+    </div>
+    <div class="grid gap-4 md:grid-cols-3">
+      <div class="glass card-hover flex flex-col justify-between rounded-xl p-5">
+        <div>
+          <div class="mb-6 flex items-center justify-between">
+            <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-[#282934] text-xl" aria-hidden="true">📝</span>
+            <span class="rounded bg-[#0c0e17] px-2 py-1 font-mono text-[11px] tracking-[0.06em] text-white/50 uppercase" data-i18n="arch.step1eyebrow">STEP 01</span>
+          </div>
+          <h3 class="font-display mb-3 text-[22px] leading-7 font-semibold tracking-tight text-white" data-i18n="how.1title">1 · Merchant lists a plan</h3>
+          <p class="text-sm leading-relaxed text-white/55">
+            <span data-i18n="how.1a">Put a mint, amount and billing period into a</span>
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#d8b9ff]">plan</code>
+            <span data-i18n="how.1b">PDA — one merchant, many plans namespaced by</span>
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#d8b9ff]">plan_id</code><span data-i18n="how.1c">. Terms are immutable, so a new price is simply a new plan.</span>
+          </p>
+        </div>
+        <div class="mt-6 space-y-1 rounded-lg bg-[#0c0e17] p-3.5 font-mono text-[11px] leading-4 tracking-[0.06em]">
+          <div class="text-[#00dbe9]">PDA: seeds = ["plan", merchant, plan_id.le]</div>
+          <div class="text-white/55">amount &gt; 0 · period &gt; 0 · immutable</div>
+        </div>
+      </div>
+      <div class="glass card-hover flex flex-col justify-between rounded-xl p-5">
+        <div>
+          <div class="mb-6 flex items-center justify-between">
+            <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-[#282934] text-xl" aria-hidden="true">✍️</span>
+            <span class="rounded bg-[#0c0e17] px-2 py-1 font-mono text-[11px] tracking-[0.06em] text-white/50 uppercase" data-i18n="arch.step2eyebrow">STEP 02</span>
+          </div>
+          <h3 class="font-display mb-3 text-[22px] leading-7 font-semibold tracking-tight text-white" data-i18n="how.2title">2 · You subscribe in one click</h3>
+          <p class="text-sm leading-relaxed text-white/55">
+            <span data-i18n="how.2a">Your wallet signs</span>
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#a0ffc3]">approve</code>
+            <span data-i18n="how.2b">(delegate = subscription PDA, capped at 1 period) plus</span>
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#a0ffc3]">subscribe</code>
+            <span data-i18n="how.2c">— atomically, in one transaction.</span>
+          </p>
+        </div>
+        <div class="mt-6 space-y-1 rounded-lg bg-[#0c0e17] p-3.5 font-mono text-[11px] leading-4 tracking-[0.06em]">
+          <div class="text-[#a0ffc3]">ix 1: approve(sub-PDA, allowance)  // wallet</div>
+          <div class="text-white/55">ix 2: subscribe() → Active, last_paid_at = 0</div>
+        </div>
+      </div>
+      <div class="glass card-hover flex flex-col justify-between rounded-xl p-5">
+        <div>
+          <div class="mb-6 flex items-center justify-between">
+            <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-[#282934] text-xl" aria-hidden="true">⚙️</span>
+            <span class="rounded bg-[#0c0e17] px-2 py-1 font-mono text-[11px] tracking-[0.06em] text-white/50 uppercase" data-i18n="arch.step3eyebrow">STEP 03</span>
+          </div>
+          <h3 class="font-display mb-3 text-[22px] leading-7 font-semibold tracking-tight text-white" data-i18n="how.3title">3 · The contract charges every period</h3>
+          <p class="text-sm leading-relaxed text-white/55">
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#7df4ff]">charge</code>
+            <span data-i18n="how.3a">goes through only when</span>
+            <span class="font-mono text-[13px] text-white/80">now ≥ last_paid_at + period</span><span data-i18n="how.3b">. Cancel anytime —</span>
+            <code class="rounded bg-[#0c0e17] px-1.5 py-0.5 font-mono text-[13px] text-[#7df4ff]">revoke + cancel</code><span data-i18n="how.3c">.</span>
+          </p>
+        </div>
+        <div class="mt-6 space-y-1 rounded-lg bg-[#0c0e17] p-3.5 font-mono text-[11px] leading-4 tracking-[0.06em]">
+          <div class="text-[#eddcff]">ix: transfer_checked(amount) · sub-PDA signer</div>
+          <div class="text-white/55">Security: CPI signed by Subscription PDA</div>
+        </div>
+      </div>
+
+      <!-- Animated delegate-flow summary (SVG art, decorative) -->
+      <div class="glass md:col-span-3 mt-4 rounded-xl p-5">
+        <p class="eyebrow mb-5 text-center text-white/40" data-i18n="df.caption">live delegate flow · model b</p>
+        <DelegateFlow client:visible />
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- Plans -->
+  <section id="plany" class="scroll-mt-24 border-t border-white/5 py-16 sm:py-24">
+    <div class="mx-auto w-full max-w-6xl px-6">
+    <div class="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="msym text-[26px] text-[#d8b9ff]" aria-hidden="true">subscriptions</span>
+          <h2 class="font-display text-h2 font-bold tracking-tight" data-i18n="plans.title">Live plans</h2>
+        </div>
+        <p class="text-lead mt-2 max-w-2xl text-white/55" data-i18n="plans.lead">On-chain data. Subscribing = approve + subscribe in a single transaction.</p>
+      </div>
+    </div>
+    <PlansGrid client:load />
+
+    <!-- Merchant guidance strip (template: always under the grid) -->
+    <div class="glass mt-6 flex flex-col items-start justify-between gap-3 rounded-xl px-4 py-3.5 sm:flex-row sm:items-center">
+      <div class="flex items-center gap-4">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#282934] text-[#d8b9ff]">
+          <span class="msym text-[20px]" aria-hidden="true">storefront</span>
+        </div>
+        <div>
+          <h3 class="font-display text-sm font-semibold text-white/90" data-i18n="empty.stripTitle">No plans in your own program yet?</h3>
+          <p class="mt-0.5 text-xs leading-relaxed text-white/50" data-i18n="empty.stripLead">
+            Create your first plan on the Merchant page — it appears here once the transaction confirms on-chain.
+          </p>
+        </div>
+      </div>
+      <a href="/merchant" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#282934] px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#32343f]">
+        <span data-i18n="empty.cta">Create a plan</span>
+        <span class="msym text-[16px] text-[#d8b9ff]" aria-hidden="true">arrow_forward</span>
+      </a>
+    </div>
+    </div>
+  </section>
+
+  <section class="border-t border-white/5 py-16 sm:py-24" aria-labelledby="proofs-title">
+    <div class="mx-auto w-full max-w-6xl px-6">
+    <p class="eyebrow text-white/40" data-i18n="proofs.eyebrow">on-chain proofs · live numbers</p>
+    <h2 id="proofs-title" class="font-display text-h2 mt-2 font-bold tracking-tight" data-i18n="proofs.title">Proofs, not promises</h2>
+    <p class="text-lead mt-2 max-w-2xl text-white/55" data-i18n="proofs.lead">Every figure below comes from the chain or the database. Empty states show a dash — never a mock.</p>
+    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+      <div class="glass card-hover rounded-xl px-5 py-4">
+        <p id="settled-volume" class="tnum font-display text-[clamp(1.5rem,7vw,2rem)] leading-10 font-semibold tracking-tight text-white"><span class="skeleton inline-block h-7 w-32 rounded-lg">&nbsp;</span></p>
+        <p class="eyebrow mt-1 text-white/50"><span data-i18n="proofs.volumeLabel">Settled volume (USD)</span></p>
+        <p class="hairline mt-2 pt-2 font-mono text-[11px] text-white/50"><span data-i18n="proofs.volumeHint">recorded charges · live</span><span id="settled-count"></span></p>
+      </div>
+      <div class="glass card-hover rounded-xl px-5 py-4">
+        <p id="proofs-plans" class="tnum font-display text-[clamp(1.5rem,7vw,2rem)] leading-10 font-semibold tracking-tight text-white">{planCount}</p>
+        <p class="eyebrow mt-1 text-white/50"><span data-i18n="proofs.plansLabel">Live plans</span></p>
+        <p class="hairline mt-2 pt-2 font-mono text-[11px] text-white/50"><span data-i18n="proofs.plansHint">getProgramAccounts · live</span></p>
+      </div>
+      <div class="glass card-hover rounded-xl px-5 py-4">
+        <p id="proofs-merchants" class="tnum font-display text-[clamp(1.5rem,7vw,2rem)] leading-10 font-semibold tracking-tight text-white">{merchantCount}</p>
+        <p class="eyebrow mt-1 text-white/50"><span data-i18n="proofs.merchantsLabel">Merchants</span></p>
+        <p class="hairline mt-2 pt-2 font-mono text-[11px] text-white/50"><span data-i18n="proofs.merchantsHint">distinct plan authorities</span></p>
+      </div>
+    </div>
+    <p class="mt-2 font-mono text-[11px] text-white/50">
+      <span data-i18n="proofs.volumeNote">Sums recorded charge amounts as USDC base units (6dp). Mixed mints add up raw —</span>
+      <span class="text-cyan-300/80">GET /api/stats/volume</span>
+    </p>
+    <ActivityFeed client:idle />
+    </div>
+  </section>
+
+  <!-- Below-the-fold informational islands hydrate on idle / when scrolled
+       into view — no eager client:load JS + RPC before the user gets there. -->
+  <ProofsTable client:idle />
+
+  <AgentStrip client:idle />
+
+  <JudgeFaq client:visible />
+
+  <section class="border-t border-white/5 py-16 sm:py-24" aria-labelledby="integ-title">
+    <div class="mx-auto w-full max-w-6xl px-6">
+    <p class="eyebrow text-white/40" data-i18n="integ.eyebrow">subscribe-client-SDK · 3 lines</p>
+    <h2 id="integ-title" class="font-display text-h2 mt-2 font-bold tracking-tight" data-i18n="integ.title">Recurring payments in 3 lines of code</h2>
+    <p class="text-lead mt-2 max-w-2xl text-white/55" data-i18n="integ.lead">Fetch the plan, approve + subscribe atomically, then charge every period. No SDK to install — plain Actions endpoints.</p>
+    <div class="mt-5 overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0e17]">
+      <div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+        <div class="flex items-center gap-1.5">
+          <span class="h-2.5 w-2.5 rounded-full bg-white/20" aria-hidden="true"></span>
+          <span class="h-2.5 w-2.5 rounded-full bg-white/15" aria-hidden="true"></span>
+          <span class="h-2.5 w-2.5 rounded-full bg-white/10" aria-hidden="true"></span>
+          <span class="ml-2 font-mono text-[11px] text-white/60" data-i18n="home2.codeFile">actions.endpoints</span>
+        </div>
+        <button id="integ-copy" type="button" class="cursor-pointer rounded-lg px-2 py-1 font-mono text-[11px] text-white/60 transition-colors hover:text-white" data-i18n="home2.copy">Copy</button>
+      </div>
+      <pre id="integ-code" class="codeblock overflow-x-auto border-0 bg-transparent">GET  /api/actions/subscribe?plan=&lt;PLAN&gt;&amp;mint=&lt;MINT&gt;&amp;amount=&lt;RAW&gt;  → metadata + unsigned tx
+POST /api/actions/subscribe   # approve(sub-PDA, 1 period) + subscribe() in one atomic tx
+POST /api/actions/charge?plan=&lt;PLAN&gt;&amp;subscriber=&lt;WALLET&gt;          # one period via transfer_checked</pre>
+    </div>
+    </div>
+  </section>
+
+  <!-- Blinks showcase (template: flat panel + self-hosted actions preview card) -->
+  <section class="py-16 sm:py-24" aria-labelledby="blink-title">
+    <div class="mx-auto w-full max-w-6xl px-6">
+    <div class="relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#191b25] p-5 sm:p-8">
+      <div class="relative z-10 grid items-center gap-8 lg:grid-cols-12">
+        <div class="space-y-6 lg:col-span-7">
+          <p class="inline-flex items-center gap-2 rounded-lg bg-[#282934] px-3.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.06em] text-[#00dbe9] uppercase">
+            <span class="msym text-[16px]" aria-hidden="true">bolt</span>
+            <span data-i18n="blinkprev.eyebrow">Solana Actions &amp; Blinks</span>
+          </p>
+          <h2 id="blink-title" class="font-display text-h2 leading-tight font-bold tracking-tight">
+            <span data-i18n="cta.titleA">One link =</span>
+            <span class="grad-text" data-i18n="cta.titleAccent">one subscription</span>
+          </h2>
+          <p class="text-lead max-w-xl leading-relaxed text-white/55" data-i18n="cta.lead">
+            Turn any action — plan, subscription, cancel, charge — into a Blink. Paste the URL on X or Discord and people pay without ever opening this site.
+          </p>
+          <div class="flex flex-col items-stretch gap-4 pt-2 sm:flex-row sm:items-center">
+            <a href="/blink" class="btn-stitch inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm">
+              <span class="msym text-[20px]" aria-hidden="true">bolt</span>
+              <span data-i18n="cta.action">Build a Blink</span>
+            </a>
+            <!-- Official protocol docs — the spec lives at solana.com, not on a gateway. -->
+            <a
+              href="https://solana.com/docs/actions"
+              target="_blank"
+              rel="noreferrer"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-[#1d1f29] px-5 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#282934]"
+            >
+              <span class="msym text-[18px] text-white/40" aria-hidden="true">open_in_new</span>
+              <span data-i18n="cta.spec">Actions spec docs</span>
+            </a>
+          </div>
+          <div class="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2">
+            <div class="flex items-center gap-2.5">
+              <span class="msym text-[20px] text-[#14f195]" aria-hidden="true">check_circle</span>
+              <span class="text-[13px] font-medium text-white/85" data-i18n="blinkprev.check1">No redirects from X</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <span class="msym text-[20px] text-[#14f195]" aria-hidden="true">check_circle</span>
+              <span class="text-[13px] font-medium text-white/85" data-i18n="blinkprev.check2">Phantom &amp; Solflare native</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <span class="msym text-[20px] text-[#14f195]" aria-hidden="true">check_circle</span>
+              <span class="text-[13px] font-medium text-white/85" data-i18n="blinkprev.check3">plan_id parametrized in the URL</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <span class="msym text-[20px] text-[#14f195]" aria-hidden="true">check_circle</span>
+              <span class="text-[13px] font-medium text-white/85" data-i18n="blinkprev.check4">Metadata preview in Discord</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-center lg:col-span-5">
+          <div class="w-full max-w-sm space-y-4 rounded-xl border border-white/[0.08] bg-[#0c0e17] p-5">
+            <div class="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-[#1d1f29]">
+              <div class="relative z-10 flex flex-col items-center p-4 text-center">
+                <div class="mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0c0e17] text-[#d8b9ff]">
+                  <span class="msym text-[28px]" aria-hidden="true">loop</span>
+                </div>
+                <span class="font-display text-lg font-semibold text-white">OnchainSUB</span>
+                <span class="font-mono text-[11px] tracking-[0.06em] text-[#a0ffc3] uppercase" data-i18n="blinkprev.bannerLabel">solana actions preview</span>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="font-mono text-[11px] tracking-[0.06em] whitespace-nowrap text-white/50 uppercase" data-i18n="blinkprev.actionUri">solana-action://</span>
+                <span class="tag-pill" data-i18n="blinkprev.dialReady">actions spec ready</span>
+              </div>
+{preview ? (
+
+              <h3 id="blinkprev-amount" class="font-display font-bold text-white">
+                <span data-i18n="blinkprev.subTitle">Subscribe</span>: {preview.amount} / {preview.period}
+              </h3>
+              <p id="blinkprev-meta" class="text-xs leading-relaxed text-white/50"><span data-i18n="blinkprev.merchantPrefix">merchant </span><span title={preview.merchantFull}>{preview.merchant}</span> · <span data-i18n="blinkprev.cardLabel">blink preview · self-hosted</span></p>
+              <div class="pt-2">
+                <!-- No gateway link: the button copies the solana-action: URL that
+                     wallets (Phantom, Solflare) consume natively; the smaller link
+                     opens our own endpoint, whose GET renders the action JSON. -->
+                <button
+                  id="blinkprev-copy"
+                  type="button"
+                  data-blink={preview.blink}
+                  class="btn-stitch flex w-full cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-bold"
+                >
+                  <span class="msym text-[18px]" aria-hidden="true">content_copy</span>
+                  <span data-i18n="blinkprev.subscribe">Subscribe</span>
+                  <span id="blinkprev-copy-check" class="hidden shrink-0 items-center gap-0.5 text-[#14f195]">
+                    <span class="msym text-[15px]" aria-hidden="true">check</span>
+                    <span data-i18n="blinkprev.copied">Copied</span>
+                  </span>
+                </button>
+                <a href={preview.endpoint} target="_blank" rel="noreferrer" class="mt-2 flex items-center justify-center gap-1 font-mono text-[11px] tracking-[0.06em] text-[#00dbe9] uppercase hover:underline" data-i18n="blinkprev.viewJson">view action JSON</a>
+                <p class="mt-2.5 flex items-center justify-center gap-1.5 font-mono text-[11px] tracking-[0.06em] text-white/50 uppercase">
+                  <span data-i18n="blinkprev.verifiedBy">native in Phantom &amp; Solflare</span>
+                </p>
+              </div>
+
+              ) : (
+              <h3 id="blinkprev-ph-title" class="font-display font-bold text-white" data-i18n="blinkprev.placeholderTitle">No plans yet</h3>
+              <p id="blinkprev-ph-body" class="text-xs leading-relaxed text-white/50" data-i18n="blinkprev.placeholderBody">Create the first plan and it will preview here.</p>
+              <div class="pt-2">
+                <a href="/merchant" class="btn-stitch flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-bold">
+                  <span class="msym text-[18px]" aria-hidden="true">electric_bolt</span>
+                  <span data-i18n="blinkprev.cta">Create a plan</span>
+                </a>
+              </div>
+            
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <script>
+    import "../lib/i18n-proofs.js";
+    import "../lib/i18n-port1.js";
+    import "../lib/i18n-home2.js";
+    import { get } from "svelte/store";
+    import { t } from "../lib/i18n.js";
+    import { DEMO_PLANS, DEMO_STATS, isDemoMode } from "../lib/demo.js";
+
+    // Settled volume: live = GET /api/stats/volume (SUM + COUNT from
+    // invoice_charges, proxied to the backend). No data / DB down = dash,
+    // never a mock. Demo mode renders DEMO_STATS through the same formatter.
+    // Recorded amounts are USDC base units (6dp), formatted like live.
+    const MICRO = 1000000n;
+
+    function formatUsd(micro: bigint): string {
+      const abs = micro < 0n ? -micro : micro;
+      const sign = micro < 0n ? "-" : "";
+      const whole = (abs / MICRO).toLocaleString("en-US");
+      const cents = (abs % MICRO).toString().padStart(6, "0").slice(0, 2);
+      return sign + "$" + whole + "." + cents;
+    }
+
+    function countLabel(n: number): string {
+      if (document.documentElement.lang === "pl") {
+        return n === 1 ? " · 1 obciążenie" : " · " + n + " obciążeń";
+      }
+      return n === 1 ? " · 1 charge" : " · " + n + " charges";
+    }
+
+    let lastCount: number | null = null;
+
+    function renderCount(): void {
+      const cnt = document.getElementById("settled-count");
+      if (cnt !== null && lastCount !== null && lastCount > 0) cnt.textContent = countLabel(lastCount);
+    }
+
+    document.addEventListener("solhack:lang", () => renderCount());
+
+    async function loadVolume(): Promise<void> {
+      const el = document.getElementById("settled-volume");
+      if (el === null) return;
+      if (isDemoMode()) {
+        el.textContent = formatUsd(BigInt(Math.round(DEMO_STATS.volumeUsd * 1000000)));
+        const plans = document.getElementById("proofs-plans");
+        if (plans !== null) plans.textContent = String(DEMO_STATS.livePlans);
+        const merchants = document.getElementById("proofs-merchants");
+        if (merchants !== null) merchants.textContent = String(DEMO_STATS.merchants);
+        lastCount = null;
+        const cnt = document.getElementById("settled-count");
+        if (cnt !== null) cnt.textContent = "";
+        applyDemoHero();
+        return;
+      }
+      try {
+        const res = await fetch("/api/stats/volume", { headers: { accept: "application/json" } });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = (await res.json()) as { volume?: unknown; count?: unknown };
+        const rawCount = json !== null && typeof json === "object" ? json.count : 0;
+        const n = typeof rawCount === "number" ? rawCount : Number(rawCount ?? 0);
+        if (!Number.isFinite(n) || n <= 0) {
+          el.textContent = "–";
+          lastCount = null;
+          return;
+        }
+        const rawVolume = json !== null && typeof json === "object" ? json.volume : "0";
+        el.textContent = formatUsd(BigInt(typeof rawVolume === "string" ? rawVolume : String(rawVolume ?? "0")));
+        lastCount = Math.trunc(n);
+        renderCount();
+      } catch {
+        el.textContent = "–";
+        lastCount = null;
+      }
+    }
+
+    // Demo mode hero/blink overrides — fixtures ONLY from demo.ts
+    // (DEMO_STATS / DEMO_PLANS), same formatters as live. Live markup above
+    // is SSR truth; this only swaps text nodes when ?demo=1 is active.
+    function shortDemo(addr: string): string {
+      return addr.length > 10 ? addr.slice(0, 4) + "…" + addr.slice(-4) : addr;
+    }
+
+    function applyDemoHero(): void {
+      const stat = document.getElementById("stat-plans");
+      if (stat !== null) stat.textContent = String(DEMO_STATS.livePlans);
+      const d = DEMO_PLANS[0];
+      if (!d) return;
+      const amount = document.getElementById("blinkprev-amount");
+      if (amount !== null) amount.textContent = d.amountUi + " " + d.mintSymbol;
+      const meta = document.getElementById("blinkprev-meta");
+      if (meta !== null)
+        meta.textContent = d.periodLabel + " · " + get(t)("blinkprev.merchantPrefix") + shortDemo(d.merchant);
+      const phTitle = document.getElementById("blinkprev-ph-title");
+      if (phTitle !== null) phTitle.textContent = d.title;
+      const phBody = document.getElementById("blinkprev-ph-body");
+      if (phBody !== null) phBody.textContent = d.blurb;
+    }
+
+    function copyLabel(): string {
+      return document.documentElement.lang === "pl" ? "Kopiuj" : "Copy";
+    }
+
+    function copiedLabel(): string {
+      return document.documentElement.lang === "pl" ? "Skopiowano" : "Copied";
+    }
+
+    function wireCopy(): void {
+      const btn = document.getElementById("integ-copy");
+      const code = document.getElementById("integ-code");
+      if (btn === null || code === null) return;
+      btn.addEventListener("click", () => {
+        const text = code.textContent ?? "";
+        const done = (): void => {
+          btn.textContent = copiedLabel();
+          window.setTimeout(() => {
+            btn.textContent = copyLabel();
+          }, 2000);
+        };
+        if (navigator.clipboard !== undefined && typeof navigator.clipboard.writeText === "function") {
+          void navigator.clipboard.writeText(text).then(done, () => {});
+        } else {
+          // Clipboard API unavailable (non-secure context): legacy fallback.
+          // Typed loosely on purpose — lib.dom marks execCommand deprecated.
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          (document as unknown as { execCommand(commandId: string): boolean }).execCommand("copy");
+          document.body.removeChild(ta);
+          done();
+        }
+      });
+      document.addEventListener("solhack:lang", () => {
+        btn.textContent = copyLabel();
+      });
+    }
+
+    // Blink preview card: copies the self-hosted solana-action: URL (wallets
+    // consume it directly — no gateway) and confirms with a "Copied ✓" tick
+    // right at the button for 2 s.
+    function wireBlinkCopy(): void {
+      const btn = document.getElementById("blinkprev-copy");
+      const check = document.getElementById("blinkprev-copy-check");
+      if (btn === null || check === null) return;
+      const blink = btn.getAttribute("data-blink") ?? "";
+      if (blink === "") return;
+      btn.addEventListener("click", () => {
+        const done = (): void => {
+          check.classList.remove("hidden");
+          check.classList.add("inline-flex");
+          window.setTimeout(() => {
+            check.classList.add("hidden");
+            check.classList.remove("inline-flex");
+          }, 2000);
+        };
+        if (navigator.clipboard !== undefined && typeof navigator.clipboard.writeText === "function") {
+          void navigator.clipboard.writeText(blink).then(done, () => {});
+        } else {
+          // Clipboard API unavailable (non-secure context): legacy fallback.
+          // Typed loosely on purpose — lib.dom marks execCommand deprecated.
+          const ta = document.createElement("textarea");
+          ta.value = blink;
+          document.body.appendChild(ta);
+          ta.select();
+          (document as unknown as { execCommand(commandId: string): boolean }).execCommand("copy");
+          document.body.removeChild(ta);
+          done();
+        }
+      });
+    }
+
+    void loadVolume();
+    wireCopy();
+    wireBlinkCopy();
+  </script>
+</Layout>

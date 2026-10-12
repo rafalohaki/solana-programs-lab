@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- OnchainSUB favicon. Bold diamond ring (recurring-cycle motif) around a
+       solid core: thin ribbons vanish at 16-32 px, so both shapes stay >= 7 units.
+       Full brand gradient #9945FF -> #14F195 on the sign (same direction as the
+       header logo, 135deg), on a void #11131d rounded-square canvas. Ink reaches
+       27/64 from center, leaving a safe ~5px margin on every edge. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9945FF"/>
+      <stop offset="1" stop-color="#14F195"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#11131d"/>
+  <path d="M32 10 L54 32 L32 54 L10 32 Z" fill="none" stroke="url(#g)" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M32 23 L41 32 L32 41 L23 32 Z" fill="#FFFFFF"/>
+</svg>

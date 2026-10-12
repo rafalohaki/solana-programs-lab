@@ -1,0 +1,29 @@
+{
+  "description": "Solana Contract Lab — on-chain subscriptions (program + Actions + dApp).",
+  "name": "solana-programs-lab",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "workspaces": [
+    "actions",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "web:dev": "cd frontend && bun run dev",
+    "web:check": "cd frontend && bun run check",
+    "web:build": "cd frontend && bun run build",
+    "web:preview": "cd frontend && bun run preview",
+    "backend:dev": "cd backend && bun run dev",
+    "backend:check": "cd backend && bun run typecheck",
+    "backend:test": "docker compose exec -T backend bun run test",
+    "actions:typecheck": "cd actions && bun run typecheck",
+    "stack:up": "docker compose up -d --build",
+    "stack:down": "docker compose down",
+    "stack:logs": "docker compose logs -f",
+    "e2e": "cd e2e && bunx playwright test"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}

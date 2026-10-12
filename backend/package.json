@@ -1,0 +1,32 @@
+{
+  "dependencies": {
+    "@subscriptions/actions": "file:../actions",
+    "drizzle-orm": "^0.44.0",
+    "effect": "^4.0.1",
+    "hono": "^4.7.0",
+    "nodemailer": "^10.0.16",
+    "postgres": "^3.4.5",
+    "tweetnacl": "^1.0.3"
+  },
+  "description": "HTTP backend for on-chain subscriptions — Hono on Bun, Postgres (drizzle) + Redis cache, mounts @subscriptions/actions handlers.",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/nodemailer": "^8.0.2",
+    "bun-types": "^1.2.0",
+    "drizzle-kit": "^0.31.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "name": "@subscriptions/backend",
+  "private": true,
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --timeout 30000 src/routes.test.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

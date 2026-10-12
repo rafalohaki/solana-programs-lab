@@ -1,0 +1,29 @@
+{
+  "description": "Solana Actions (Blinks) API for on-chain subscriptions — framework-free Web-standard handlers portable to Next.js route.ts.",
+  "name": "@subscriptions/actions",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.8",
+    "@solana/web3.js": "^1.98.0",
+    "effect": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

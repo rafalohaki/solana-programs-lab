@@ -1,0 +1,1398 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { Connection, PublicKey } from "@solana/web3.js";
+import {
+  CLUSTER,
+  PROGRAM_ID,
+  RPC_ENDPOINT,
+  decodePlan,
+  fetchMintDecimals,
+  formatPeriod,
+  formatTokenAmount,
+  readEnv,
+  shortAddr,
+} from "../lib/chain.js";
+import { SITE_URL } from "../lib/blinks.js";
+import { DEMO_PLANS } from "../lib/demo.js";
+import { buildTransferUrl } from "../lib/solanapay.js";
+
+export const prerender = false;
+// Query-dependent checkout HTML (?plan/?host/?demo → per-request gate status
+// 200/400/403/404/502): never let an edge or browser cache serve one visitor
+// another visitor's rendered checkout state.
+Astro.response.headers.set("Cache-Control", "no-store");
+
+// ---------------------------------------------------------------------------
+// Server gate (untouched logic): ?plan=<address>&host=<domain> → widget check
+// → RPC plan load. Demo mode (?demo=1) renders DEMO_PLANS[0] fixtures INSTEAD
+// of any fetch, per the global demo rule. The simulator tabs below switch
+// ONLY the client preview — they never re-hit this gate.
+// ---------------------------------------------------------------------------
+
+function backendBase(): string {
+  const raw = process.env["BACKEND_URL"] ?? "http://backend:3001";
+  return raw.replace(/\/+$/, "");
+}
+
+const planParam = (Astro.url.searchParams.get("plan") ?? "").trim();
+const hostParam = (Astro.url.searchParams.get("host") ?? "").trim();
+const demoParam = Astro.url.searchParams.get("demo") === "1";
+// One-time payment mode (?mode=pay): bypasses the plan/domain-bind gate — a
+// direct transfer needs no plan account and no host binding. Validated below,
+// rendered as its own card; the subscription checkout markup is untouched.
+const payMode = (Astro.url.searchParams.get("mode") ?? "").trim() === "pay";
+
+let status: number = 200;
+let headline: string = "";
+let detail: string = "";
+// i18n keys for the SSR error card (EN baked server-side; PL swaps client-side
+// via data-i18n). The mono "HTTP {status}" badge stays outside translation.
+let errHeadKey: string = "";
+let errDetailKey: string = "";
+let merchantAddr: string = "";
+let mintAddr: string = "";
+let amountRaw: string = "0";
+let amountUi: string = "—";
+let periodUi: string = "—";
+let planIdUi: string = "—";
+let subscribeEndpoint: string = "";
+let isDemoPlan = false;
+// One-time mode values (populated only when payMode):
+let payMerchant = "";
+let payMint: string | null = null;
+let payAmount = 0n;
+let payAmountUi = "";
+let payLabel = "";
+let payMemo = "";
+let isDemoPay = false;
+/** Token decimals for the one-time amount (null = unknown: no UI-amount URL). */
+let payDecimals: number | null = null;
+/** Solana Pay transfer-request URL, or null when it cannot be built honestly. */
+let solanaPayUrl: string | null = null;
+/** Base58 Solana address shape (merchant/mint params of ?mode=pay). */
+const PAY_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+/** u64 upper bound for the raw amount param. BigInt via string, NOT a hex
+ * `…n` literal: @astrojs/compiler 2.13.1 mis-scans hex BigInt literals and
+ * then leaves a duplicate `export const prerender` inside the component body,
+ * which esbuild rejects at build time ("Unexpected export"). */
+const U64_MAX = BigInt("0xffffffffffffffff");
+// Visible value for the fallback tab only: the PUBLIC override when set,
+// otherwise the same-origin proxy path. The SSR-internal default
+// (BACKEND_URL/host.docker.internal) must never reach the markup — the
+// browser resolves its own endpoint client-side (see the script below).
+const displayRpc = readEnv("PUBLIC_SOLANA_RPC", "").length > 0 ? readEnv("PUBLIC_SOLANA_RPC", "") : "/api/rpc";
+
+if (payMode) {
+  // One-time branch: validate the link params here, no widget /check and no
+  // plan RPC read. Demo mode (?demo=1) renders the card with payments
+  // disabled — no fixtures, no fetch (global demo rule).
+  isDemoPay = demoParam;
+  const merchantParam = (Astro.url.searchParams.get("merchant") ?? "").trim();
+  const amountParam = (Astro.url.searchParams.get("amount") ?? "").trim();
+  const mintParam = (Astro.url.searchParams.get("mint") ?? "").trim();
+  const labelParam = (Astro.url.searchParams.get("label") ?? "").trim();
+  const memoParam = (Astro.url.searchParams.get("memo") ?? "").trim();
+  const badLink = (): void => {
+    status = 400;
+    headline = "Invalid payment link";
+    detail = "Expected ?mode=pay&merchant=<address>&amount=<base units>.";
+    errHeadKey = "payerr.payBadHeadline";
+    errDetailKey = "payerr.payBadDetail";
+  };
+  if (!PAY_ADDR_RE.test(merchantParam)) {
+    badLink();
+  } else if (!/^\d+$/.test(amountParam) || amountParam === "0" || BigInt(amountParam) > U64_MAX) {
+    badLink();
+  } else if (mintParam !== "" && !PAY_ADDR_RE.test(mintParam)) {
+    badLink();
+  } else if (
+    (labelParam !== "" && (labelParam.length > 120 || /[\u0000-\u001f\u007f]/.test(labelParam))) ||
+    (memoParam !== "" && (memoParam.length > 200 || /[\u0000-\u001f\u007f]/.test(memoParam)))
+  ) {
+    badLink();
+  } else {
+    try {
+      payMerchant = new PublicKey(merchantParam).toBase58();
+    } catch {
+      badLink();
+    }
+  }
+  if (status === 200) {
+    payAmount = BigInt(amountParam);
+    payMint = mintParam === "" ? null : mintParam;
+    payLabel = labelParam;
+    payMemo = memoParam;
+    merchantAddr = payMerchant;
+    amountRaw = amountParam;
+    // Big display amount: native SOL is always 9 decimals (protocol constant);
+    // token decimals come from the chain — never from the URL. When the RPC
+    // is unreachable the raw base-unit count stays visible (honest fallback),
+    // because the actions endpoint re-reads decimals itself at build time.
+    if (payMint === null) {
+      payDecimals = 9;
+      payAmountUi = formatTokenAmount(payAmount, 9);
+    } else if (isDemoPay) {
+      payDecimals = null;
+      payAmountUi = `${amountParam} base units`;
+    } else {
+      try {
+        const conn = new Connection(RPC_ENDPOINT, "confirmed");
+        payDecimals = await fetchMintDecimals(conn, new PublicKey(payMint));
+        payAmountUi = formatTokenAmount(payAmount, payDecimals);
+      } catch {
+        payDecimals = null;
+        payAmountUi = `${amountParam} base units`;
+      }
+    }
+  }
+} else if (demoParam) {
+  const d = DEMO_PLANS[0];
+  if (d === undefined) {
+    status = 500;
+    headline = "Demo unavailable";
+    detail = "Demo fixtures failed to load. Retry or continue without ?demo=1.";
+    errHeadKey = "payerr.demoHeadline";
+    errDetailKey = "payerr.demoDetail";
+  } else {
+    isDemoPlan = true;
+    merchantAddr = d.merchant;
+    mintAddr = d.mintSymbol;
+    amountRaw = d.amountUi;
+    amountUi = `${d.amountUi} ${d.mintSymbol}`;
+    periodUi = d.periodLabel;
+    planIdUi = d.planId;
+    subscribeEndpoint = "";
+  }
+} else if (planParam === "") {
+  status = 400;
+  headline = "Missing plan";
+  detail = "Open this checkout through a merchant site (expected ?plan=<address>&host=<domain>).";
+  errHeadKey = "payerr.missingPlanHeadline";
+  errDetailKey = "payerr.missingPlanDetail";
+} else {
+  let allowed = false;
+  try {
+    const res = await fetch(
+      `${backendBase()}/api/widget/check?plan=${encodeURIComponent(planParam)}&host=${encodeURIComponent(hostParam)}`,
+    );
+    if (res.ok) {
+      allowed = ((await res.json()) as { allowed?: boolean }).allowed === true;
+    } else {
+      status = 502;
+      headline = "Checkout unavailable";
+      detail = "The domain-bind service is unreachable. Try again in a moment.";
+      errHeadKey = "payerr.gateDownHeadline";
+      errDetailKey = "payerr.gateDownDetail";
+    }
+    if (status === 200 && !allowed) {
+      status = 403;
+      headline = "This site is not allowed to sell this plan";
+      detail =
+        "Domain-bind: the merchant registered this plan for their own domain only. " +
+        "A copied snippet on a foreign domain always ends here (403).";
+      // Same copy as the 403 mock panel — reuse the flows2 keys, no duplicates.
+      errHeadKey = "flows2.blockHeadline";
+      errDetailKey = "flows2.blockBody";
+    }
+  } catch {
+    status = 502;
+    headline = "Checkout unavailable";
+    detail = "The domain-bind service is unreachable. Try again in a moment.";
+    errHeadKey = "payerr.gateDownHeadline";
+    errDetailKey = "payerr.gateDownDetail";
+  }
+
+  if (status === 200) {
+    try {
+      const conn = new Connection(RPC_ENDPOINT, "confirmed");
+      const key = new PublicKey(planParam);
+      const info = await conn.getAccountInfo(key);
+      const decoded = info === null ? null : decodePlan(key, info.data);
+      if (decoded === null) {
+        status = 404;
+        headline = "Plan not found";
+        detail = "No plan account exists at this address on the configured cluster.";
+        errHeadKey = "payerr.planNotFoundHeadline";
+        errDetailKey = "payerr.planNotFoundDetail";
+      } else {
+        const decimals = await fetchMintDecimals(conn, decoded.mint);
+        merchantAddr = decoded.merchant.toBase58();
+        mintAddr = decoded.mint.toBase58();
+        amountRaw = decoded.amount.toString();
+        amountUi = `${formatTokenAmount(decoded.amount, decimals)} (raw ${amountRaw})`;
+        periodUi = formatPeriod(decoded.periodSeconds);
+        planIdUi = decoded.planId.toString();
+        const qs = new URLSearchParams({
+          plan: planParam,
+          mint: mintAddr,
+          amount: amountRaw,
+          programId: PROGRAM_ID.toBase58(),
+          cluster: CLUSTER,
+        });
+        subscribeEndpoint = `/api/actions/subscribe?${qs.toString()}`;
+      }
+    } catch {
+      status = 502;
+      headline = "Chain read failed";
+      detail = "Could not load the plan from RPC. Check the cluster and retry.";
+      errHeadKey = "payerr.chainDownHeadline";
+      errDetailKey = "payerr.chainDownDetail";
+    }
+  }
+}
+
+// Solana Pay transfer-request URL for the one-time card: recipient + amount
+// are known here with real token decimals, so the URL is built once on the
+// server. Demo mode builds no transaction (row hidden); unknown SPL decimals
+// or a builder throw also hide the row — no data = empty state, never a
+// fake link.
+if (payMode && status === 200 && !isDemoPay && payDecimals !== null) {
+  try {
+    const ui = Number.parseFloat((Number(payAmount) / 10 ** payDecimals).toFixed(payDecimals));
+    solanaPayUrl = buildTransferUrl({
+      recipient: payMerchant,
+      uiAmount: ui,
+      ...(payLabel !== "" ? { label: payLabel } : {}),
+      ...(payMemo !== "" ? { memo: payMemo } : {}),
+    });
+  } catch {
+    solanaPayUrl = null;
+  }
+}
+
+if (status !== 200) Astro.response.status = status;
+
+const displayHost = hostParam === "" ? "— (no host param)" : hostParam;
+const demo0 = DEMO_PLANS[0];
+const demoAddress = demo0 === undefined ? "DEMO" : demo0.address;
+let planShort = "—";
+if (isDemoPlan) {
+  planShort = `${demoAddress.slice(0, 6)}… (demo)`;
+} else if (status === 200 && planParam !== "") {
+  try {
+    planShort = `${shortAddr(new PublicKey(planParam), 6)}…`;
+  } catch {
+    planShort = "—";
+  }
+}
+let merchantShort = "—";
+if (merchantAddr !== "") {
+  if (isDemoPlan) {
+    merchantShort = `${merchantAddr.slice(0, 6)}… (demo)`;
+  } else {
+    try {
+      merchantShort = `${shortAddr(new PublicKey(merchantAddr), 6)}…`;
+    } catch {
+      merchantShort = "—";
+    }
+  }
+}
+const fallbackPlan = isDemoPlan ? demoAddress : planParam === "" ? "<PLAN>" : planParam;
+const fallbackAction = `/api/actions/subscribe?plan=${encodeURIComponent(fallbackPlan)}`;
+// One canonical origin for shareable Action URLs (PUBLIC_SITE_URL, same
+// source as blinks.ts blinkUrl/subscribeActionUrl) — the request origin
+// varies with Host forwarding behind the tunnel/proxy.
+const fullActionUrl = `${SITE_URL}${fallbackAction}`;
+// Explorer deep link for the merchant row (address-poisoning copy-verify);
+// demo fixtures are not on-chain accounts → no link for them.
+const explorerAddrUrl =
+  merchantAddr === "" || isDemoPlan
+    ? null
+    : CLUSTER === "mainnet-beta"
+      ? `https://explorer.solana.com/address/${merchantAddr}`
+      : `https://explorer.solana.com/address/${merchantAddr}?cluster=${CLUSTER}`;
+// Real on-chain program id, shortened for the header status tray.
+const programIdFull = PROGRAM_ID.toBase58();
+const programIdShort = `${programIdFull.slice(0, 6)}…${programIdFull.slice(-4)}`;
+---
+
+<Layout title={status === 200 ? (payMode ? (payLabel !== "" ? payLabel : "One-time payment") : "Checkout") : headline} description="OnchainSUB checkout — one-time payment or domain-bound subscription with attack simulator.">
+  <!-- =========================================================================
+       ONE-TIME MODE (?mode=pay): a plain-transfer checkout card. The server
+       builds an unsigned SystemProgram.transfer / SPL transferChecked at
+       /api/actions/pay; the wallet is the only signer. No plan gate, no
+       domain-bind — the explorer links below are real params of this link.
+       ========================================================================= -->
+  {payMode && (
+    <section class="mx-auto max-w-3xl pt-12 pb-12">
+      <div class="min-w-0">
+        <p class="w-fit rounded-full bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-[0.06em] text-[#14f195] uppercase" data-i18n="pay1.eyebrow">
+          one-time payment · direct transfer
+        </p>
+        <h1 class="font-display mt-2 text-3xl font-bold tracking-tight sm:text-4xl" data-i18n="pay1.h1">
+          One-time payment
+        </h1>
+        <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/55 sm:text-[15px]" data-i18n="pay1.lead">
+          A plain Solana transfer you sign in your wallet — one-time payment, no recurring charges. No delegate, no
+          subscription, no stored allowance. The server builds the transaction; it never signs it.
+        </p>
+      </div>
+
+      {
+        status === 400 ? (
+          <div class="mt-6 rounded-2xl bg-[#282934] p-8 text-center ring-2 ring-[#93000a]">
+            <p class="font-mono text-[11px] tracking-wider text-[#ffb4ab]/70 uppercase">HTTP {status}</p>
+            <h2 class="font-display mt-3 text-2xl font-bold tracking-tight text-[#ffb4ab]" data-i18n={errHeadKey}>{headline}</h2>
+            <p class="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/55" data-i18n={errDetailKey}>{detail}</p>
+            <pre class="codeblock mx-auto mt-4 max-w-xl overflow-x-auto text-left font-mono text-[11px] break-all whitespace-pre-wrap text-white/45">/pay?mode=pay&amp;merchant=&lt;address&gt;&amp;amount=&lt;base units&gt;&amp;[mint=&lt;address&gt;&amp;label=&amp;memo=]</pre>
+          </div>
+        ) : (
+      <div class="mt-6 rounded-2xl bg-[#282934] p-6 shadow-xl sm:p-8" data-pay-card>
+        <div class="flex items-center justify-between rounded-t-xl bg-[#32343f]/20 px-2 pt-1">
+          <div class="flex items-center gap-2">
+            <span class="font-display text-sm font-semibold text-white/90" data-i18n="pay1.cardTitle">One-time checkout</span>
+          </div>
+          {isDemoPay && <span class="tag-pill">DEMO</span>}
+        </div>
+        <!-- Big amount — the one number this page sells. Label (merchant-chosen)
+             sits above; base units stay visible below it (honest raw view). -->
+        <div class="mt-4 min-w-0 rounded-xl bg-[#1d1f29] p-5 text-center">
+          {payLabel !== "" && <p class="font-display break-words text-base text-white/85">{payLabel}</p>}
+          <div class="font-display mt-1 text-4xl font-bold tracking-tight break-words text-[#d8b9ff] sm:text-5xl">{payAmountUi}</div>
+          <p class="mt-1 font-mono text-[11px] tracking-wider text-white/35 uppercase">
+            {payMint === null ? "SOL" : "SPL"} · {amountRaw} base units
+          </p>
+        </div>
+        <div class="mt-3 space-y-3">
+          <!-- Address-poisoning defense (copy-verify): full address via the
+               copy button, short form display-only, Explorer when live. -->
+          <div class="flex items-center justify-between gap-2 rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+            <span class="shrink-0 text-white/55" data-i18n="pay1.merchantRow">Merchant</span>
+            <span class="flex min-w-0 items-center justify-end gap-1.5">
+              <span class="truncate font-mono text-[13px] font-semibold text-white/90" title={payMerchant || undefined}>{merchantShort}</span>
+              <button
+                type="button"
+                id="pay1-copy-merchant"
+                class="shrink-0 cursor-pointer rounded p-0.5 text-white/45 transition-colors hover:text-[#00f0ff]"
+                data-addr={payMerchant}
+                data-i18n-title="paysim.copyMerchantTitle"
+                title="Copy the full merchant address and verify it in your wallet."
+              >
+                <span class="msym text-[14px]" aria-hidden="true">content_copy</span>
+                <span class="sr-only" data-i18n="paysim.copyMerchantSr">Copy merchant address</span>
+              </button>
+              {explorerAddrUrl !== null && (
+                <a
+                  href={explorerAddrUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  class="shrink-0 rounded p-0.5 text-white/45 transition-colors hover:text-[#00dbe9]"
+                  data-i18n-title="paysim.explorerTitle"
+                  title="Open the merchant address in the Solana Explorer."
+                >
+                  <span class="msym text-[14px]" aria-hidden="true">open_in_new</span>
+                  <span class="sr-only" data-i18n="paysim.explorerSr">Merchant address on Explorer</span>
+                </a>
+              )}
+            </span>
+          </div>
+          <div class="flex items-center justify-between gap-2 rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+            <span class="shrink-0 text-white/55" data-i18n="pay1.assetRow">Asset</span>
+            {payMint === null ? (
+              <span class="min-w-0 truncate font-mono text-[13px] text-white/90" data-i18n="pay1.assetSol">SOL (native)</span>
+            ) : (
+              <span class="min-w-0 truncate font-mono text-[13px] text-white/90">
+                <span title={payMint}>{payMint.slice(0, 8)}…</span> <span class="text-white/45" data-i18n="pay1.splToken">SPL token</span>
+              </span>
+            )}
+          </div>
+          {payMemo !== "" && (
+            <div class="flex items-center justify-between gap-2 rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+              <span class="shrink-0 text-white/55" data-i18n="pay1.memoRow">Memo</span>
+              <span class="min-w-0 truncate font-mono text-[13px] text-white/90">{payMemo}</span>
+            </div>
+          )}
+          {solanaPayUrl !== null && (
+            <div class="flex items-center justify-between gap-2 rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+              <span class="shrink-0 text-white/55" data-i18n="pay1.solpayRow">Solana Pay</span>
+              <span class="flex min-w-0 items-center justify-end gap-1.5">
+                <a
+                  href={solanaPayUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  class="min-w-0 truncate font-mono text-[13px] text-[#7df4ff] transition-colors hover:text-[#00f0ff] hover:underline"
+                  data-i18n="pay1.openWallet"
+                >Open in wallet</a>
+                <button
+                  type="button"
+                  id="pay1-copy-solpay"
+                  class="shrink-0 cursor-pointer rounded p-0.5 text-white/45 transition-colors hover:text-[#00f0ff]"
+                  data-url={solanaPayUrl}
+                  data-i18n-title="pay1.copySolpayTitle"
+                  title="Copy the Solana Pay URL to share or open in your wallet."
+                >
+                  <span class="msym text-[14px]" aria-hidden="true">content_copy</span>
+                  <span class="sr-only" data-i18n="pay1.copySolpaySr">Copy Solana Pay URL</span>
+                </button>
+              </span>
+            </div>
+          )}
+          <div class="flex items-center justify-between rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+            <span class="text-white/55" data-i18n="port4.payModelRow">Payment model</span>
+            <span class="rounded bg-[#14f195]/10 px-2 py-0.5 text-right font-mono text-[11px] text-[#14f195]" data-i18n="pay1.modelV">Direct transfer — no delegate, no custody</span>
+          </div>
+        </div>
+        <div class="mt-5 grid gap-2">
+          {isDemoPay ? (
+            <button type="button" class="btn-primary flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg px-4 py-4 text-sm opacity-60" disabled>
+              <span class="msym text-[20px]" aria-hidden="true">lock_open</span>
+              <span data-i18n="pay1.demoDisabled">Pay (disabled in demo — no transaction is built)</span>
+            </button>
+          ) : (
+            <button
+              id="pay1-send"
+              type="button"
+              class="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-4 text-sm"
+              data-merchant={payMerchant}
+              data-amount={amountRaw}
+              data-mint={payMint ?? ""}
+              data-label={payLabel}
+              data-memo={payMemo}
+            >
+              <span class="msym text-[20px]" aria-hidden="true">bolt</span>
+              <span data-i18n="pay1.payCta">Pay</span>
+            </button>
+          )}
+          <p class="mt-1 text-center text-xs text-white/40" data-i18n="pay1.hint">
+            You sign exactly one transfer — no recurring charges. Funds go straight to the merchant's wallet.
+          </p>
+        </div>
+        <p id="pay1-status" class="mt-1 min-h-5 text-center text-xs text-white/50" role="status" />
+        <!-- Confirmation screen (hidden until the transfer lands): honest
+             signature + Explorer deep link, plus a warning when the receipt
+             service failed to record the (already final) payment. -->
+        <div id="pay1-success" class="mt-4 hidden space-y-2 rounded-xl bg-[#0c0e17] p-5 ring-1 ring-[#14f195]/40">
+          <div class="flex items-center gap-2">
+            <span class="msym text-[20px] text-[#14f195]" aria-hidden="true">check_circle</span>
+            <h2 class="font-display text-lg font-bold text-white/90" data-i18n="pay1.successTitle">Payment confirmed</h2>
+          </div>
+          <p class="text-[13px] text-white/55" data-i18n="pay1.successLead">The transfer is confirmed on-chain. Verify it in the Explorer:</p>
+          <p id="pay1-sig" class="codeblock break-all">—</p>
+          <p id="pay1-record-warn" class="hidden rounded bg-[#ffb4ab]/10 p-2 font-mono text-[11px] leading-relaxed text-[#ffb4ab]" data-i18n="pay1.recordWarn">
+            The on-chain payment is confirmed, but the receipt service did not record it — the transfer itself is complete.
+          </p>
+          <a id="pay1-explorer" href="#" target="_blank" rel="noreferrer" class="btn-ghost inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm">
+            <span class="msym text-[18px]" aria-hidden="true">open_in_new</span>
+            <span data-i18n="pay1.viewExplorer">View in Explorer</span>
+          </a>
+        </div>
+      </div>
+      )
+      }
+    </section>
+  )}
+
+  {!payMode && (
+  <section class="mx-auto max-w-6xl pt-12 pb-12">
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <div class="min-w-0">
+        <p class="w-fit rounded-full bg-[#282934] px-2.5 py-1 font-mono text-[11px] tracking-[0.06em] text-[#00dbe9] uppercase" data-i18n="paysim.eyebrow">
+          checkout · domain-bound execution
+        </p>
+        <h1 class="font-display mt-2 text-3xl font-bold tracking-tight sm:text-4xl" data-i18n="paysim.h1">
+          Embeddable Checkout & Domain Protection
+        </h1>
+        <p class="mt-2 max-w-3xl text-sm leading-relaxed text-white/55 sm:text-[15px]" data-i18n="paysim.lead">
+          Interactive execution-environment simulator. Tab 1 runs the real server-gated checkout below. Tabs 2–3 are
+          labelled mock previews: they never change the host, never touch the server gate — they show what an attacker
+          (or an outage) would see.
+        </p>
+      </div>
+      <!-- Status tray (Stitch header pattern) — real values only: program id from
+           the chain lib and the host param from this request. No fixtures. -->
+      <div class="hidden shrink-0 items-center gap-3 rounded-xl bg-[#191b25] p-2 lg:flex">
+        <div class="flex items-center gap-2 rounded-lg bg-[#1d1f29] px-3 py-1.5">
+          <span class="msym text-[18px] text-[#56ffa8]" aria-hidden="true">verified</span>
+          <div class="flex min-w-0 flex-col">
+            <span class="font-mono text-[9px] tracking-[0.06em] text-white/40 uppercase" data-i18n="paysim.trayProgramLabel">PDA PROGRAM</span>
+            <span class="font-mono text-[11px] text-white/90">{programIdShort}</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 rounded-lg bg-[#1d1f29] px-3 py-1.5">
+          <span class="msym text-[18px] text-[#d8b9ff]" aria-hidden="true">key</span>
+          <div class="flex min-w-0 flex-col">
+            <span class="font-mono text-[9px] tracking-[0.06em] text-white/40 uppercase" data-i18n="paysim.bindMetric">DOMAIN-BIND</span>
+            <span class="max-w-[180px] truncate font-mono text-[11px] text-white/90">{hostParam === "" ? "—" : hostParam}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simulator tab console (Stitch attack console; toggle logic below untouched) -->
+    <div class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-b from-[#282934] to-[#1d1f29] p-6 shadow-xl">
+      <div class="mb-4 flex items-start gap-2">
+        <span class="msym shrink-0 rounded-lg bg-[#00dbe9]/10 p-1.5 text-[20px] text-[#00dbe9]" aria-hidden="true">tune</span>
+        <div class="min-w-0">
+          <h2 class="font-display text-[18px] font-medium" data-i18n="paysim.consoleTitle">Attack & environment console</h2>
+          <p class="text-xs text-white/55" data-i18n="paysim.consoleDesc">
+            Switch attack vectors to test the server gate, origin authorization and the RPC fallback path.
+          </p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2" role="tablist" data-i18n-aria="paysim.simAria" aria-label="Checkout simulator">
+        <button
+          type="button"
+          id="sim-tab-ok"
+          class="btn-primary inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ring-1 ring-inset ring-white/10"
+          role="tab"
+          aria-selected="true"
+          data-sim-tab="ok"
+        >
+          <span class="msym text-[18px]" aria-hidden="true">domain_verification</span>
+          <span data-i18n="paysim.tabOk">1. Authorized domain</span>
+        </button>
+        <button
+          type="button"
+          id="sim-tab-phishing"
+          class="btn-ghost inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ring-1 ring-inset ring-white/10"
+          role="tab"
+          aria-selected="false"
+          data-sim-tab="phishing"
+        >
+          <span class="msym text-[18px] text-[#ffb4ab]" aria-hidden="true">warning</span>
+          <span data-i18n="paysim.tabPhish">2. Phishing attack (403 Origin)</span>
+        </button>
+        <button
+          type="button"
+          id="sim-tab-fallback"
+          class="btn-ghost inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ring-1 ring-inset ring-white/10"
+          role="tab"
+          aria-selected="false"
+          data-sim-tab="fallback"
+        >
+          <span class="msym text-[18px] text-[#00dbe9]" aria-hidden="true">cloud_off</span>
+          <span data-i18n="paysim.tabFallback">3. API outage (502 Fallback)</span>
+        </button>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#32343f]/30 p-3 font-mono text-[11px] text-white/45">
+        <span class="flex items-center gap-1.5">
+          <span data-i18n="paysim.simState">SIMULATION STATE:</span>
+          <span
+            id="sim-state"
+            class="inline-flex items-center gap-1.5 rounded-full bg-[#56ffa8]/20 px-2.5 py-0.5 tracking-[0.06em] text-[#56ffa8] uppercase ring-1 ring-inset ring-white/10"
+          >
+            <span class="h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-current" aria-hidden="true"></span>
+            <span id="sim-state-text">LIVE — real server gate</span>
+          </span>
+        </span>
+        <!-- min-w-0 + truncate: a very long ?host= value must clip here,
+             never push the SIMULATION STATE bar into horizontal overflow
+             on a 390px viewport (a host has no spaces/break opportunities). -->
+        <span class="flex min-w-0 max-w-full items-center gap-1.5">
+          <span class="shrink-0" data-i18n="paysim.hostLabel">HOST:</span>
+          <span class="min-w-0 max-w-full truncate text-white/75">{displayHost}</span>
+        </span>
+        <span>
+          <span data-i18n="paysim.liveCheckLabel">Live domain-bind check:</span>
+          <span
+            id="live-check"
+            class="text-white/75"
+            data-plan={isDemoPlan ? "" : planParam}
+            data-host={hostParam}
+            data-demo={demoParam ? "1" : "0"}
+          >
+            checking…
+          </span>
+        </span>
+      </div>
+    </div>
+
+    <div class="mt-4 grid gap-4 [&>*]:min-w-0 lg:grid-cols-[1.25fr_1fr]">
+      <!-- LEFT: preview column (tabs switch ONLY this column). Flex column +
+           h-full panel: the mock browser card stretches to the proof rail's
+           height so the bottom-left quadrant is never empty on lg. -->
+      <div class="flex min-w-0 flex-col">
+        <!-- TAB 1: live checkout (existing flow, untouched) -->
+        <div id="sim-ok" role="tabpanel" aria-labelledby="sim-tab-ok" class="flex h-full min-w-0 flex-col">
+          <div class="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10">
+            <div class="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/40 px-4 py-2.5 font-mono text-[11px] text-white/50">
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#93000a]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#373944]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#00ec91]"></span>
+              <div class="ml-2 flex min-w-40 flex-1 items-center justify-between gap-2 rounded-lg bg-[#0c0e17] px-3 py-1.5">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="msym shrink-0 text-[16px] text-[#56ffa8]" aria-hidden="true">lock</span>
+                  <span class="truncate font-mono text-[13px] text-white/90">{displayHost}/checkout</span>
+                </div>
+                <span class="hidden shrink-0 rounded bg-[#00ec91]/20 px-2 py-0.5 text-[10px] tracking-[0.06em] text-[#56ffa8] uppercase sm:inline" data-i18n="paysim.barVerified">VERIFIED TLS + PDA</span>
+              </div>
+              <span class="hidden shrink-0 rounded bg-[#56ffa8]/10 px-2 py-0.5 text-[#56ffa8] lg:inline" data-i18n="paysim.liveBadge">
+                LIVE — real checkout, real wallet
+              </span>
+            </div>
+            {
+              status === 403 ? (
+                <div class="relative flex-1 overflow-hidden rounded-b-xl bg-[#0c0e17] p-6 text-center ring-2 ring-[#93000a] sm:p-8">
+                  <div class="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#ffb4ab] via-[#93000a] to-[#ffb4ab]"></div>
+                  <p class="font-mono text-[11px] tracking-wider text-[#ffb4ab]/70 uppercase">HTTP {status}</p>
+                  <div class="mx-auto mt-3 flex max-w-xl items-center gap-2 rounded-lg bg-[#ffb4ab]/10 p-3 text-left text-[#ffb4ab]">
+                    <span class="msym shrink-0 text-[20px]" aria-hidden="true">gpp_bad</span>
+                    <span class="min-w-0 font-mono text-[11px] font-semibold tracking-widest uppercase" data-i18n="port4.blockTitle">SECURITY BLOCK — 403 ORIGIN MISMATCH</span>
+                  </div>
+                  <h2 class="font-display mt-3 text-2xl font-bold tracking-tight text-[#ffb4ab]" data-i18n={errHeadKey}>{headline}</h2>
+                  <p class="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/55" data-i18n={errDetailKey}>{detail}</p>
+                  <p class="mt-4 text-xs text-white/40">
+                    <span data-i18n="paysim.merchantHint">Merchant? Bind your domain via</span>{" "}
+                    <span class="font-mono">POST /api/widget/sites</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/examples" data-i18n="paysim.merchantHintTail">— see the live widget demo.</a>
+                  </p>
+                  <button
+                    type="button"
+                    disabled
+                    class="mt-5 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#32343f]/60 py-4 font-display text-sm text-white/35"
+                  >
+                    <span class="msym text-[20px]" aria-hidden="true">lock</span>
+                    <span data-i18n="paysim.blockedCta">Transaction blocked — unauthorized domain</span>
+                  </button>
+                </div>
+              ) : status === 502 ? (
+                <div class="flex-1 border-t border-white/10 bg-[#0c0e17] p-8 text-center">
+                  <div class="mx-auto flex max-w-xl items-center gap-2 rounded-lg bg-[#00838c]/30 p-3 text-left text-[#7df4ff]">
+                    <span class="msym shrink-0 text-[20px]" aria-hidden="true">cloud_off</span>
+                    <span class="min-w-0 font-mono text-[11px] font-semibold tracking-widest uppercase" data-i18n="paysim.outageBanner">Gate unreachable — direct RPC fallback ready</span>
+                  </div>
+                  <p class="mt-4 font-mono text-[11px] tracking-wider text-[#7df4ff]/70 uppercase">HTTP {status}</p>
+                  <h2 class="font-display mt-2 text-2xl font-bold tracking-tight text-[#7df4ff]" data-i18n={errHeadKey}>{headline}</h2>
+                  <p class="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/55" data-i18n={errDetailKey}>{detail}</p>
+                  <p class="mt-4 text-xs text-white/40">
+                    <span data-i18n="paysim.merchantHint">Merchant? Bind your domain via</span>{" "}
+                    <span class="font-mono">POST /api/widget/sites</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/examples" data-i18n="paysim.merchantHintTail">— see the live widget demo.</a>
+                  </p>
+                </div>
+              ) : status !== 200 ? (
+                <div class="flex-1 border-t border-white/10 bg-[#0c0e17] p-8 text-center">
+                  <p class="font-mono text-[11px] tracking-wider text-[#ffb4ab]/70 uppercase">HTTP {status}</p>
+                  <h2 class="font-display mt-2 text-2xl font-bold tracking-tight" data-i18n={errHeadKey}>{headline}</h2>
+                  <p class="mt-2 text-sm leading-relaxed text-white/55" data-i18n={errDetailKey}>{detail}</p>
+                  <p class="mt-4 text-xs text-white/40">
+                    <span data-i18n="paysim.merchantHint">Merchant? Bind your domain via</span>{" "}
+                    <span class="font-mono">POST /api/widget/sites</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/examples" data-i18n="paysim.merchantHintTail">— see the live widget demo.</a>
+                  </p>
+                </div>
+              ) : (
+                <div class="flex-1 space-y-6 rounded-xl bg-[#282934] p-6 shadow-xl" data-pay-card>
+                  {isDemoPlan && (
+                    <p class="flex flex-wrap items-center justify-center gap-x-2 rounded-xl bg-[#ff3b69]/10 p-2.5 text-center font-mono text-[11px] text-[#ffb4ab]">
+                      <span class="tag-pill">DEMO</span>
+                      <span data-i18n="paysim.demoBanner">fixture plan, no fetch. Banner exit returns to live data.</span>
+                    </p>
+                  )}
+                  <div class="flex items-center justify-between rounded-t-xl bg-[#32343f]/20 px-2 pt-1">
+                    <div class="flex items-center gap-2">
+                      <span class="font-display text-sm font-semibold text-white/90" data-i18n="port4.paySafeCheckout">OnchainSUB Checkout</span>
+                    </div>
+                    <span class="flex items-center gap-1 rounded-full bg-[#14f195]/15 px-2.5 py-1 font-mono text-[11px] text-[#14f195]">
+                      <span class="msym text-[14px]" aria-hidden="true">shield</span> <span data-i18n="port4.payVerified">Verified Merchant</span>
+                    </span>
+                  </div>
+                  <div class="flex items-center justify-between rounded-xl bg-[#1d1f29] p-4">
+                    <div class="space-y-1">
+                      <div class="font-display text-base text-white/95"><span data-i18n="port4.paySubscribeA">Subscribe — </span>{planShort}</div>
+                      <div class="text-xs text-white/55"><span data-i18n="port4.payRecurringA">Recurring charge every </span>{periodUi}</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="font-display text-xl font-bold text-[#d8b9ff]">{amountUi}</div>
+                      <div class="font-mono text-[11px] tracking-wider text-white/35 uppercase"><span data-i18n="port4.payPerPeriod">/ </span>{periodUi}</div>
+                    </div>
+                  </div>
+                  <div class="space-y-3">
+                    <!-- Address-poisoning defense (copy-verify): the tooltip and
+                         the copy button carry the FULL merchant address; the
+                         short form stays display-only. On-chain plans get an
+                         Explorer link; demo fixtures are copy-only (badged). -->
+                    <div class="flex items-center justify-between gap-2 rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+                      <span class="shrink-0 text-white/55" data-i18n="port4.payMerchantRow">Merchant</span>
+                      <span class="flex min-w-0 items-center justify-end gap-1.5">
+                        <span class="truncate font-mono text-[13px] font-semibold text-white/90" title={merchantAddr || undefined}>{merchantShort}</span>
+                        {merchantAddr !== "" && (
+                          <button
+                            type="button"
+                            id="copy-merchant"
+                            class="shrink-0 cursor-pointer rounded p-0.5 text-white/45 transition-colors hover:text-[#00f0ff]"
+                            data-addr={merchantAddr}
+                            data-i18n-title="paysim.copyMerchantTitle"
+                            title="Copy the full merchant address and verify it in your wallet."
+                          >
+                            <span class="msym text-[14px]" aria-hidden="true">content_copy</span>
+                            <span class="sr-only" data-i18n="paysim.copyMerchantSr">Copy merchant address</span>
+                          </button>
+                        )}
+                        {explorerAddrUrl !== null && (
+                          <a
+                            href={explorerAddrUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            class="shrink-0 rounded p-0.5 text-white/45 transition-colors hover:text-[#00dbe9]"
+                            data-i18n-title="paysim.explorerTitle"
+                            title="Open the merchant address in the Solana Explorer."
+                          >
+                            <span class="msym text-[14px]" aria-hidden="true">open_in_new</span>
+                            <span class="sr-only" data-i18n="paysim.explorerSr">Merchant address on Explorer</span>
+                          </a>
+                        )}
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+                      <span class="text-white/55" data-i18n="port4.payModelRow">Payment model</span>
+                      <span class="rounded bg-[#14f195]/10 px-2 py-0.5 font-mono text-[11px] text-[#14f195]" data-i18n="port4.payModelV">SPL Token Delegate (non-custodial)</span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-[#32343f]/30 px-3 py-2 text-sm">
+                      <span class="text-white/55" data-i18n="port4.payMemoRow">Memo invoice</span>
+                      <span class="font-mono text-[13px] text-white/90">plan #{planIdUi}</span>
+                    </div>
+                  </div>
+                  <p class="rounded-xl bg-white/[0.03] p-3 font-mono text-[11px] leading-relaxed text-white/45">
+                    approve = exactly one period ({amountRaw} of <span class="text-white/70">{mintAddr.slice(0, 8)}…</span>)
+                  </p>
+                  <div class="grid gap-2 pt-2">
+                    <button id="pay-connect" type="button" class="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-4 text-sm">
+                      <span class="msym text-[20px]" aria-hidden="true">account_balance_wallet</span>
+                      <span data-i18n="flows2.connectCta">Connect wallet</span>
+                    </button>
+                    {isDemoPlan ? (
+                      <button type="button" class="btn-primary flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg px-4 py-4 text-sm opacity-60" disabled>
+                        <span class="msym text-[20px]" aria-hidden="true">lock_open</span>
+                        <span data-i18n="flows2.demoDisabled">Subscribe (disabled in demo — no transaction is built)</span>
+                      </button>
+                    ) : (
+                      <button
+                        id="pay-subscribe"
+                        type="button"
+                        class="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-4 text-sm"
+                        data-endpoint={subscribeEndpoint}
+                      >
+                        <span class="msym text-[20px]" aria-hidden="true">lock_open</span>
+                        <span data-i18n="flows2.subscribeCta">Subscribe</span>
+                      </button>
+                    )}
+                    <p class="mt-1 text-center text-xs text-white/40" data-i18n="port4.payHint">
+                      Auto-renews each period at the amount above — one charge per period. No vault: funds stay in your wallet until each charge. Cancel anytime in My subscriptions — revoking the delegate stops billing. Charges are final, the protocol has no refunds.
+                    </p>
+                  </div>
+                  <p id="pay-status" class="min-h-5 text-center text-xs text-white/50" role="status" />
+                </div>
+              )
+            }
+          </div>
+        </div>
+
+        <!-- TAB 2: phishing 403 mock preview (no host change) -->
+        <div id="sim-phishing" role="tabpanel" hidden>
+          <div class="overflow-hidden rounded-2xl border border-[#93000a]/30">
+            <div class="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/40 px-4 py-2.5 font-mono text-[11px] text-white/50">
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#93000a]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#373944]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#00ec91]"></span>
+              <div class="ml-2 flex min-w-40 flex-1 items-center justify-between gap-2 rounded-lg bg-[#0c0e17] px-3 py-1.5">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="msym shrink-0 text-[16px] text-[#ffb4ab]" aria-hidden="true">warning</span>
+                  <span class="truncate font-mono text-[13px] text-white/90" data-i18n="paysim.phishBar">https://evil.com/pricing/enterprise</span>
+                </div>
+                <span class="hidden shrink-0 rounded bg-[#ffb4ab]/20 px-2 py-0.5 text-[10px] tracking-[0.06em] text-[#ffb4ab] uppercase sm:inline" data-i18n="paysim.barInvalid">INVALID CERT &amp; ORIGIN</span>
+              </div>
+              <span class="chip-pastdue shrink-0">
+                <span class="sm:hidden" data-i18n="paysim.mockBadgeShort">MOCK</span>
+                <span class="hidden sm:inline" data-i18n="paysim.mockBadge">MOCK PREVIEW — no host change, no funds move</span>
+              </span>
+            </div>
+            <div class="relative overflow-hidden rounded-b-xl bg-[#0c0e17] p-6 text-center shadow-2xl ring-2 ring-[#93000a] sm:p-8">
+              <div class="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#ffb4ab] via-[#93000a] to-[#ffb4ab]"></div>
+              <div class="mb-6 flex items-center justify-between gap-3 rounded-lg bg-[#ffb4ab]/10 p-3 text-[#ffb4ab]">
+                <span class="font-mono text-[11px] font-semibold tracking-widest uppercase" data-i18n="port4.blockTitle">SECURITY BLOCK — 403 ORIGIN MISMATCH</span>
+                <span class="rounded bg-[#ffb4ab]/20 px-2 py-0.5 font-mono text-[11px] text-[#ffb4ab]" data-i18n="port4.riskLabel">ATTACK SUCCESS: 0%</span>
+              </div>
+              <p class="font-mono text-[11px] tracking-wider text-[#ffb4ab]/70 uppercase">HTTP 403</p>
+              <h2 class="font-display mt-2 text-2xl font-bold tracking-tight" data-i18n="flows2.blockHeadline">
+                This site is not allowed to sell this plan
+              </h2>
+              <p class="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/55" data-i18n="flows2.blockBody">
+                Domain-bind: the merchant registered this plan for their own domain only. A copied snippet on a
+                foreign domain always ends here (403).
+              </p>
+              <p class="mt-4 text-xs text-white/40">
+                <span data-i18n="paysim.merchantHint">Merchant? Bind your domain via</span>{" "}
+                <span class="font-mono">POST /api/widget/sites</span> <a class="text-[#7df4ff] underline transition-colors hover:text-[#00f0ff]" href="/examples" data-i18n="paysim.merchantHintTail">— see the live widget demo.</a>
+              </p>
+            </div>
+            <div class="border-t border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-white/55">
+              <p class="font-semibold text-white/85" data-i18n="paysim.whyTitle">Why a domain thief gets nothing</p>
+              <p class="mt-1" data-i18n="paysim.whyBody">
+                Even if an attacker copies the whole iframe onto a prepared lookalike page, the on-chain delegate pays
+                only the merchant stored in the plan account. The stolen snippet renders a 403 page and can never move
+                funds.
+              </p>
+              <p class="mt-2 font-mono text-[11px] text-white/40" data-i18n="paysim.phishNote">
+                You are still on this host. This panel only previews the 403 page a visitor would see on evil.com — the
+                address bar above is a mock label, not a navigation.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: API outage 502 mock preview (fallback instruction) -->
+        <div id="sim-fallback" role="tabpanel" hidden>
+          <div class="overflow-hidden rounded-2xl border border-sky-300/20">
+            <div class="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/40 px-4 py-2.5 font-mono text-[11px] text-white/50">
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#93000a]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#373944]"></span>
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[#00ec91]"></span>
+              <div class="ml-2 flex min-w-40 flex-1 items-center justify-between gap-2 rounded-lg bg-[#0c0e17] px-3 py-1.5">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="msym shrink-0 text-[16px] text-[#7df4ff]" aria-hidden="true">lock</span>
+                  <span class="truncate font-mono text-[13px] text-white/90">{displayHost}/checkout</span>
+                </div>
+                <span class="hidden shrink-0 rounded bg-[#00dbe9]/20 px-2 py-0.5 text-[10px] tracking-[0.06em] text-[#7df4ff] uppercase sm:inline" data-i18n="paysim.barDirect">DIRECT SOLANA RPC</span>
+              </div>
+              <span class="chip-pastdue shrink-0">
+                <span class="sm:hidden" data-i18n="paysim.mockBadgeShort">MOCK</span>
+                <span class="hidden sm:inline" data-i18n="paysim.mockBadge">MOCK PREVIEW — no host change, no funds move</span>
+              </span>
+            </div>
+            <div class="rounded-b-xl bg-[#1d1f29] p-6 text-center shadow-xl sm:p-8">
+              <div class="flex items-start gap-3 rounded-xl bg-[#00f0ff]/10 p-4 text-left">
+                <span class="msym shrink-0 text-2xl text-[#00dbe9]" aria-hidden="true">cloud_off</span>
+                <div>
+                  <p class="font-mono text-[11px] tracking-wider text-[#ffb4ab]/70 uppercase" data-i18n="flows2.outageKicker">HTTP 502 · MOCK</p>
+                  <h2 class="font-display mt-1 text-2xl font-bold tracking-tight text-[#7df4ff]" data-i18n="flows2.outageTitle">Checkout unavailable — API outage</h2>
+                  <p class="mt-1 text-sm leading-relaxed text-white/55" data-i18n="paysim.fallbackNote">
+                    Preview of an outage: the domain-bind service is unreachable (502), so the popup cannot prove the host.
+                    The merchant backup is a direct Blink URL — same plan, same one-period approve cap, no hosted checkout
+                    needed.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-3 rounded-b-xl bg-[#191b25] p-4 text-sm leading-relaxed text-white/60">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-[11px] tracking-wider text-[#00f0ff] uppercase" data-i18n="port4.emergencyMode">EMERGENCY MODE: DIRECT ON-CHAIN RPC</span>
+                <span class="rounded bg-[#14f195]/10 px-2 py-0.5 font-mono text-[11px] text-[#14f195]" data-i18n="port4.noMiddleman">NO MIDDLEMAN</span>
+              </div>
+              <!-- Direct route card (reference pattern) — real values from the
+                   request/RPC env only. -->
+              <div class="space-y-1.5 rounded-xl bg-[#1d1f29] p-4">
+                <div class="flex items-center justify-between gap-2 rounded bg-[#32343f]/20 px-2 py-1 font-mono text-[13px]">
+                  <span class="shrink-0 text-white/40" data-i18n="paysim.routeProgram">Program</span>
+                  <span class="truncate text-white/90">{PROGRAM_ID.toBase58()}</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 rounded bg-[#32343f]/20 px-2 py-1 font-mono text-[13px]">
+                  <span class="shrink-0 text-white/40" data-i18n="paysim.routeRpc">RPC endpoint</span>
+                  <span class="truncate text-[#56ffa8]">{displayRpc}</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 rounded bg-[#32343f]/20 px-2 py-1 font-mono text-[13px]">
+                  <span class="shrink-0 text-white/40" data-i18n="paysim.routeAmount">Amount</span>
+                  <span class="truncate font-semibold text-white/90">{amountUi} (on-chain)</span>
+                </div>
+              </div>
+              <!-- Self-hosted Actions: the backup path is our own endpoint. A
+                   plain GET renders the action metadata JSON; wallets consume
+                   the same URL behind solana-action: — no gateway in between. -->
+              <a
+                href={fullActionUrl}
+                target="_blank"
+                rel="noreferrer"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00838c] py-4 font-display text-sm font-semibold text-white transition-colors hover:bg-[#00dbe9] hover:text-[#00363a]"
+              >
+                <span class="msym text-[20px]" aria-hidden="true">data_object</span>
+                <span data-i18n="paysim.openEndpoint">Open actions endpoint</span>
+              </a>
+              <ol class="list-decimal space-y-1 pl-5">
+                <li data-i18n="paysim.fallbackStep1">Copy the direct Action URL for this plan.</li>
+                <li data-i18n="paysim.fallbackStep2">Paste it into any wallet as a solana-action: link — no gateway needed.</li>
+                <li data-i18n="paysim.fallbackStep3">
+                  The wallet signs the same approve-capped transaction — the subscriber never pays more than one period.
+                </li>
+              </ol>
+              <pre class="codeblock mt-3 overflow-x-auto p-3 font-mono text-[11px] break-all whitespace-pre-wrap">{fullActionUrl}</pre>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  id="copy-fallback"
+                  type="button"
+                  class="btn-ghost cursor-pointer rounded-lg px-4 py-2 text-sm"
+                  data-url={fullActionUrl}
+                  data-i18n="paysim.copyBlink"
+                >
+                  Copy Blink URL
+                </button>
+                <a href="/blink" class="btn-ghost rounded-lg px-4 py-2 text-sm" data-i18n="paysim.openBlink">
+                  Open Blink builder
+                </a>
+              </div>
+              <p id="copy-fallback-status" class="mt-2 min-h-4 font-mono text-[11px] text-white/40" role="status"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: cryptographic proof (mechanics) + live check -->
+      <div class="grid content-start gap-4">
+        <div class="space-y-6 rounded-xl bg-[#191b25] p-6 shadow-xl">
+          <div class="flex items-center justify-between rounded-t-xl bg-[#282934]/40 px-2 pt-1">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="msym shrink-0 text-[20px] text-[#00dbe9]" aria-hidden="true">enhanced_encryption</span>
+              <h2 class="font-display text-lg font-bold" data-i18n="paysim.proofTitle">How the checkout is protected</h2>
+            </div>
+            <span class="shrink-0 rounded bg-[#14f195]/10 px-2 py-0.5 font-mono text-[10px] text-[#14f195]" data-i18n="paysim.proofBadge">
+              mechanics, not metrics
+            </span>
+          </div>
+          <ol class="space-y-4">
+            <li class="flex items-start gap-3 rounded-xl bg-[#1d1f29] p-3">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#282934] font-mono text-[12px] font-semibold text-[#00f0ff]">01</div>
+              <div class="space-y-1">
+                <p class="font-semibold text-white/85" data-i18n="paysim.step1t">1. Merchant domain registration</p>
+                <p class="text-[13px] leading-relaxed text-white/60" data-i18n="paysim.step1b">
+                  The merchant binds their domain to a plan off-chain (POST /api/widget/sites). The server gate compares
+                  the checkout host against that binding on every load — a foreign host ends at 403.
+                </p>
+                <!-- Real PDA seeds, DESIGN.md §3 (plan account). -->
+                <div class="rounded bg-[#0c0e17] p-2 font-mono text-[11px] break-all text-white/40">seeds: [b"plan", merchant, plan_id.le]</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3 rounded-xl bg-[#1d1f29] p-3">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#282934] font-mono text-[12px] font-semibold text-[#d8b9ff]">02</div>
+              <div class="space-y-1">
+                <p class="font-semibold text-white/85" data-i18n="paysim.step2t">2. Origin &amp; iframe validation</p>
+                <p class="text-[13px] leading-relaxed text-white/60" data-i18n="paysim.step2b">
+                  The popup URL carries ?plan=&lt;address&gt;&amp;host=&lt;domain&gt;. The server re-checks the pair before
+                  serving the checkout. A copied snippet on another domain fails this check even though the markup is
+                  identical.
+                </p>
+                {status === 200 && !isDemoPlan && (
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <!-- ?host= is declared by whoever crafted the URL: the server
+                         /check only answers about that param, never about the
+                         page that opened this popup — a declared value, not a
+                         verified identity. The script below warns on opener
+                         mismatch. -->
+                    <div class="flex items-center gap-1 font-mono text-[11px] text-white/55">
+                      <span class="msym shrink-0 text-[14px]" aria-hidden="true">info</span>
+                      <span class="truncate"><span data-i18n="paysim.declaredHostLabel">DECLARED HOST:</span> {hostParam || "—"}</span>
+                    </div>
+                    <p
+                      id="host-trust-warning"
+                      class="hidden rounded bg-[#ffb4ab]/10 p-2 font-mono text-[11px] leading-relaxed text-[#ffb4ab]"
+                      data-i18n="paysim.hostMismatchWarning"
+                    >
+                      Warning: this popup was opened from a different site than the declared host — verify the address
+                      before paying.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </li>
+            <li class="flex items-start gap-3 rounded-xl bg-[#1d1f29] p-3">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#282934] font-mono text-[12px] font-semibold text-[#14f195]">03</div>
+              <div class="space-y-1">
+                <p class="font-semibold text-white/85" data-i18n="paysim.step3t">3. SPL allowance & zero custody</p>
+                <p class="text-[13px] leading-relaxed text-white/60" data-i18n="paysim.step3b">
+                  Subscribing signs an approve capped at exactly one period plus subscribe, atomically. The delegate can
+                  only pay the plan merchant — a domain thief has no path to your funds.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <div class="space-y-2 rounded-xl bg-[#0c0e17] p-4">
+            <div class="flex items-center justify-between gap-2 font-mono text-[11px]">
+              <span class="min-w-0 tracking-wider text-white/35 uppercase" data-i18n="paysim.memoTitle">RAW PLAN MEMO (live from chain):</span>
+              {status === 200 && !isDemoPlan ? (
+                <span class="shrink-0 rounded bg-[#00ec91]/20 px-2 py-0.5 text-[10px] tracking-[0.06em] text-[#56ffa8] uppercase" data-i18n="paysim.memoStateLive">LOADED FROM RPC</span>
+              ) : isDemoPlan ? (
+                <span class="chip-pastdue shrink-0" data-i18n="paysim.memoStateDemo">DEMO FIXTURE</span>
+              ) : (
+                <span class="shrink-0 rounded bg-white/5 px-2 py-0.5 text-[10px] tracking-[0.06em] text-white/40 uppercase" data-i18n="paysim.memoStateError">UNAVAILABLE</span>
+              )}
+            </div>
+            {
+              status === 200 && !isDemoPlan ? (
+                <pre class="overflow-x-auto rounded bg-[#1d1f29] p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap text-[#00f0ff]">{`{
+  "program": "${PROGRAM_ID.toBase58()}",
+  "plan": "${planParam}",
+  "merchant": "${merchantAddr}",
+  "amount_raw": "${amountRaw}",
+  "host": "${hostParam}"
+}`}</pre>
+              ) : isDemoPlan ? (
+                <pre class="overflow-x-auto rounded bg-[#1d1f29] p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap text-[#ffb4ab]/90">{`{
+  "program": "DEMO — no chain read",
+  "plan": "${demoAddress}",
+  "merchant": "${demo0 === undefined ? "—" : demo0.merchant}",
+  "amount": "${demo0 === undefined ? "—" : `${demo0.amountUi} ${demo0.mintSymbol}`}"
+}`}</pre>
+              ) : (
+                <p class="mt-2 font-mono text-[11px] text-white/40" data-i18n="paysim.memoEmpty">
+                  No on-chain memo — the plan failed to load (see live status above).
+                </p>
+              )
+            }
+          </div>
+          <!-- FAQ card (reference pattern; keys reused, zero i18n debt) -->
+          <div class="space-y-2 rounded-xl bg-[#1d1f29] p-5">
+            <div class="flex min-w-0 items-center gap-2 text-white/90">
+              <span class="msym shrink-0 text-[20px] text-[#d8b9ff]" aria-hidden="true">help_outline</span>
+              <span class="font-display text-base font-bold" data-i18n="paysim.whyTitle">Why a domain thief gets nothing</span>
+            </div>
+            <p class="text-[13px] leading-relaxed text-white/60" data-i18n="paysim.whyBody">
+              Even if an attacker copies the whole iframe onto a prepared lookalike page, the on-chain delegate pays
+              only the merchant stored in the plan account. The stolen snippet renders a 403 page and can never move
+              funds.
+            </p>
+          </div>
+        </div>
+
+        <!-- Metric pair — real constants only: the on-chain FEE_BPS (fees.rs)
+             and the host param under check. Reference mock metrics (spoofing
+             rate, fake signatures) are intentionally not ported. -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="min-w-0 space-y-1 rounded-xl bg-[#191b25] p-4">
+            <div class="flex items-center gap-1.5 text-[#56ffa8]">
+              <span class="msym shrink-0 text-[18px]" aria-hidden="true">payments</span>
+              <span class="font-mono text-[11px] tracking-[0.06em] uppercase" data-i18n="paysim.feeMetric">COLLECTION FEE</span>
+            </div>
+            <div class="font-display text-xl font-bold text-white">40 bps</div>
+            <div class="text-xs leading-relaxed text-white/40" data-i18n="paysim.feeMetricSub">0.4% of every charge — on-chain constant (FEE_BPS)</div>
+          </div>
+          <div class="min-w-0 space-y-1 rounded-xl bg-[#191b25] p-4">
+            <div class="flex items-center gap-1.5 text-[#00dbe9]">
+              <span class="msym shrink-0 text-[18px]" aria-hidden="true">dns</span>
+              <span class="font-mono text-[11px] tracking-[0.06em] uppercase" data-i18n="paysim.bindMetric">DOMAIN-BIND</span>
+            </div>
+            <div class="truncate font-mono text-sm font-semibold text-white/90">{hostParam === "" ? "—" : hostParam}</div>
+            <div class="text-xs leading-relaxed text-white/40" data-i18n="paysim.bindMetricSub">Host the server gate checks on every load</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-[#191b25] p-5 text-sm leading-relaxed text-white/60 shadow-xl">
+          <h2 class="font-display text-base font-bold text-white/85" data-i18n="paysim.legendTitle">
+            What is live vs mocked on this page
+          </h2>
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-[13px]">
+            <li data-i18n="paysim.legendLive">
+              Live: the authorized-domain checkout, plan/merchant/amount loaded from RPC, and the domain-bind check below.
+            </li>
+            <li data-i18n="paysim.legendMock">
+              Mock: the phishing 403 and outage 502 panels — static previews, explicitly badged, moving no funds.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+  )}
+</Layout>
+
+<script>
+  import { initPayCheckout } from "../lib/pay-checkout.js";
+  import { isDemoMode } from "../lib/demo.js";
+  import { RPC_ENDPOINT, explorerTxUrl } from "../lib/chain.js";
+  import { notifyOpenerPaid, payOneTime, payStatusText } from "../lib/payments.js";
+  import type { SolanaProvider } from "../lib/wallet.js";
+  import "../lib/i18n-flows2.js";
+  import "../lib/i18n-pay.js";
+  import "../lib/i18n-port4.js";
+
+  // Storage-only demo flag is invisible to the server — normalize to ?demo=1
+  // so the server can serve fixtures instead of fetching.
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (isDemoMode() && !qs.has("demo")) {
+      qs.set("demo", "1");
+      window.location.replace(`${window.location.pathname}?${qs.toString()}`);
+    }
+  } catch {
+    /* private mode — session-only */
+  }
+
+  // The SSR markup carries no RPC host (the backend-internal default must
+  // never leak into the public HTML). Resolve the browser-side endpoint here,
+  // before the checkout lib reads it: chain.js evaluates to the same-origin
+  // /api/rpc proxy in the browser, or the PUBLIC_SOLANA_RPC override if set.
+  const paySubscribeBtn = document.getElementById("pay-subscribe");
+  if (paySubscribeBtn instanceof HTMLButtonElement) paySubscribeBtn.dataset.rpc = RPC_ENDPOINT;
+
+  initPayCheckout();
+
+  // ?host= is untrusted input: /check only answers about the declared param,
+  // so the page cannot show the *registered* domain. Warn when this popup was
+  // opened from a different site than the declared host — document.referrer
+  // carries the opener URL (window.opener.origin is unreadable cross-origin).
+  (function warnHostMismatch(): void {
+    const warning = document.getElementById("host-trust-warning");
+    if (warning === null) return;
+    const declared = document.querySelector<HTMLElement>("#live-check")?.dataset.host ?? "";
+    if (declared === "") return;
+    let refHost = "";
+    try {
+      refHost = new URL(document.referrer).hostname;
+    } catch {
+      return; // no usable referrer → nothing to verify, stay silent
+    }
+    // A port on the declared value (local dev) must not fake a mismatch.
+    const declaredHost = declared.replace(/:\d+$/, "");
+    if (refHost !== "" && refHost !== declaredHost) warning.classList.remove("hidden");
+  })();
+
+  // Tabs switch ONLY the preview column — the server gate is never re-hit.
+  const panels: Record<string, HTMLElement | null> = {
+    ok: document.getElementById("sim-ok"),
+    phishing: document.getElementById("sim-phishing"),
+    fallback: document.getElementById("sim-fallback"),
+  };
+  const isPl = (): boolean => document.documentElement.lang === "pl";
+  const T = {
+    demo: (): string => (isPl() ? "DEMO — dozwolone: tak (fixture, bez fetcha)" : "DEMO — allowed: true (fixture, no fetch)"),
+    needs: (): string => (isPl() ? "— (potrzebne ?plan=<adres>&host=<domena>)" : "— (needs ?plan=<address>&host=<domain>)"),
+    unreachable: (s: number): string =>
+      isPl() ? `nieosiągalny (HTTP ${s})` : `unreachable (HTTP ${s})`,
+    netErr: (): string => (isPl() ? "nieosiągalny (błąd sieci)" : "unreachable (network error)"),
+    live: (ok: boolean, s: number): string =>
+      isPl()
+        ? `dozwolone: ${ok ? "tak" : "nie"} (live, HTTP ${s})`
+        : `allowed: ${ok ? "true" : "false"} (live, HTTP ${s})`,
+    copied: (): string => (isPl() ? "Skopiowano." : "Copied."),
+    clipBlocked: (): string =>
+      isPl() ? "Schowek zablokowany — skopiuj ręcznie." : "Clipboard blocked — copy manually.",
+  };
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-sim-tab]"));
+
+  const stateEl = document.getElementById("sim-state");
+  const stateTextEl = document.getElementById("sim-state-text");
+
+  // Per-mode accents (Stitch pattern): live = emerald, 403 = error, 502 = cyan.
+  const pillPalette: Record<string, string[]> = {
+    ok: ["bg-[#56ffa8]/20", "text-[#56ffa8]"],
+    phishing: ["bg-[#93000a]", "text-[#ffb4ab]"],
+    fallback: ["bg-[#00838c]/30", "text-[#7df4ff]"],
+  };
+  const tabAccent: Record<string, string[]> = {
+    phishing: ["bg-[#93000a]", "text-[#ffdad6]"],
+    fallback: ["bg-[#00838c]", "text-white"],
+  };
+
+  function selectTab(name: string): void {
+    for (const [key, panel] of Object.entries(panels)) {
+      if (panel !== null) panel.hidden = key !== name;
+    }
+    for (const tab of tabs) {
+      const mode = tab.dataset.simTab ?? "";
+      const active = mode === name;
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+      // Roving tabindex (WAI-ARIA tabs): only the active tab is in Tab order;
+      // Arrow keys move both focus and selection.
+      tab.tabIndex = active ? 0 : -1;
+      tab.classList.toggle("btn-primary", active && mode === "ok");
+      tab.classList.toggle("btn-ghost", !active);
+      const accent = tabAccent[mode];
+      if (accent !== undefined) {
+        for (const cls of accent) tab.classList.toggle(cls, active);
+      }
+    }
+    if (stateEl !== null) {
+      for (const palette of Object.values(pillPalette)) {
+        for (const cls of palette) stateEl.classList.remove(cls);
+      }
+      const palette = pillPalette[name] ?? pillPalette["ok"];
+      if (palette !== undefined) {
+        for (const cls of palette) stateEl.classList.add(cls);
+      }
+    }
+    // Write the label only into the inner span — the outer pill carries the
+    // pulsing dot and must never be clobbered (same rule as i18n.ts live text).
+    if (stateTextEl !== null) {
+      stateTextEl.textContent = name === "ok"
+        ? isPl()
+          ? "LIVE — prawdziwa bramka serwerowa"
+          : "LIVE — real server gate"
+        : isPl()
+          ? "PODGLĄD MOCK — bramka nietknięta"
+          : "MOCK PREVIEW — server gate untouched";
+    }
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      selectTab(tab.dataset.simTab ?? "ok");
+    });
+  }
+  // Arrow-key support on the tablist (WAI-ARIA tabs pattern): Left/Right move
+  // to the previous/next tab (wrapping), Home/End jump to the first/last.
+  const tablist = tabs[0]?.parentElement ?? null;
+  tablist?.addEventListener("keydown", (e) => {
+    const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (current === -1) return;
+    let next = -1;
+    if (e.key === "ArrowRight") next = (current + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    if (next === -1) return;
+    e.preventDefault();
+    const target = tabs[next];
+    if (target === undefined) return;
+    selectTab(target.dataset.simTab ?? "ok");
+    target.focus();
+  });
+  selectTab("ok");
+
+  // Live domain-bind check for the current host (proxied /api → backend).
+  async function liveCheck(): Promise<void> {
+    const el = document.getElementById("live-check");
+    if (!(el instanceof HTMLElement)) return;
+    const plan = el.dataset.plan ?? "";
+    const host = el.dataset.host ?? "";
+    const demo = el.dataset.demo === "1";
+    if (demo) {
+      el.textContent = T.demo();
+      return;
+    }
+    if (plan === "" || host === "") {
+      el.textContent = T.needs();
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/widget/check?plan=${encodeURIComponent(plan)}&host=${encodeURIComponent(host)}`,
+      );
+      const json = (await res.json()) as { allowed?: boolean };
+      el.textContent = res.ok ? T.live(json.allowed === true, res.status) : T.unreachable(res.status);
+    } catch {
+      el.textContent = T.netErr();
+    }
+  }
+  void liveCheck();
+
+  let copyResetTimer = 0;
+  document.getElementById("copy-fallback")?.addEventListener("click", async () => {
+    const btn = document.getElementById("copy-fallback");
+    const status = document.getElementById("copy-fallback-status");
+    const url = btn instanceof HTMLElement ? (btn.dataset.url ?? "") : "";
+    if (url === "") return;
+    try {
+      await navigator.clipboard.writeText(url);
+      if (status !== null) status.textContent = T.copied();
+    } catch {
+      // Clipboard API can be blocked (permissions/context) — say so instead of
+      // pasting the raw URL as if it were a success message.
+      if (status !== null) status.textContent = T.clipBlocked();
+    }
+    // Auto-reset: a stale "Copied." must not outlive the action.
+    window.clearTimeout(copyResetTimer);
+    copyResetTimer = window.setTimeout(() => {
+      if (status !== null) status.textContent = "";
+    }, 2000);
+  });
+
+  // Merchant row copy-verify (address poisoning): copies the FULL address so
+  // it can be checked against the wallet before signing.
+  document.getElementById("copy-merchant")?.addEventListener("click", async () => {
+    const btn = document.getElementById("copy-merchant");
+    const status = document.getElementById("pay-status");
+    const addr = btn instanceof HTMLElement ? (btn.dataset.addr ?? "") : "";
+    if (addr === "") return;
+    try {
+      await navigator.clipboard.writeText(addr);
+      if (status !== null) {
+        status.textContent = isPl() ? "Adres merchanta skopiowany — zweryfikuj go w portfelu." : "Merchant address copied — verify it in your wallet.";
+        status.style.color = "#56ffa8";
+      }
+    } catch {
+      if (status !== null) status.textContent = T.clipBlocked();
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // ONE-TIME MODE (?mode=pay): elements below exist only in that markup —
+  // every lookup is null-guarded, so the subscription flow is untouched.
+  // -----------------------------------------------------------------------
+
+  function payModeProvider(): SolanaProvider | null {
+    if (typeof window === "undefined") return null;
+    return window.solana ?? window.solflare ?? null;
+  }
+
+  function setPayStatus(text: string, isError: boolean): void {
+    const el = document.getElementById("pay1-status");
+    if (el === null) return;
+    el.textContent = text;
+    el.style.color = isError ? "#fda4af" : "rgba(255,255,255,0.6)";
+  }
+
+  // Copy-verify for the one-time card's merchant row (same rule as above).
+  document.getElementById("pay1-copy-merchant")?.addEventListener("click", async () => {
+    const btn = document.getElementById("pay1-copy-merchant");
+    const addr = btn instanceof HTMLElement ? (btn.dataset.addr ?? "") : "";
+    if (addr === "") return;
+    try {
+      await navigator.clipboard.writeText(addr);
+      setPayStatus(
+        isPl() ? "Adres merchanta skopiowany — zweryfikuj go w portfelu." : "Merchant address copied — verify it in your wallet.",
+        false,
+      );
+    } catch {
+      setPayStatus(T.clipBlocked(), true);
+    }
+  });
+
+  // Solana Pay row: copies the SSR-built transfer-request URL (element exists
+  // only when recipient + UI amount were known — null-guarded like the above).
+  document.getElementById("pay1-copy-solpay")?.addEventListener("click", async () => {
+    const btn = document.getElementById("pay1-copy-solpay");
+    const url = btn instanceof HTMLElement ? (btn.dataset.url ?? "") : "";
+    if (url === "") return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setPayStatus(
+        isPl() ? "URL Solana Pay skopiowany — otwórz go w portfelu." : "Solana Pay URL copied — open it in your wallet.",
+        false,
+      );
+    } catch {
+      setPayStatus(T.clipBlocked(), true);
+    }
+  });
+
+  const payOneBtn = document.getElementById("pay1-send");
+  if (payOneBtn instanceof HTMLButtonElement) {
+    payOneBtn.addEventListener("click", () => {
+      void (async () => {
+        const ds = payOneBtn.dataset;
+        const merchant = ds.merchant ?? "";
+        const amountRaw = ds.amount ?? "";
+        const mint = ds.mint ?? "";
+        if (merchant === "" || !/^\d+$/.test(amountRaw)) return;
+        const provider = payModeProvider();
+        if (provider === null) {
+          setPayStatus(payStatusText("pay1.statusNoWallet", "No wallet found — install Phantom or Solflare."), true);
+          return;
+        }
+        payOneBtn.disabled = true;
+        try {
+          setPayStatus(payStatusText("pay1.statusBuilding", "Building transaction… confirm in your wallet."), false);
+          const result = await payOneTime({
+            merchant,
+            amount: BigInt(amountRaw),
+            ...(mint !== "" ? { mint } : {}),
+            ...(ds.label ? { label: ds.label } : {}),
+            ...(ds.memo ? { memo: ds.memo } : {}),
+          });
+          // Confirmation screen: real signature + Explorer deep link.
+          const sigEl = document.getElementById("pay1-sig");
+          if (sigEl !== null) sigEl.textContent = result.signature;
+          const link = document.getElementById("pay1-explorer");
+          if (link instanceof HTMLAnchorElement) link.href = explorerTxUrl(result.signature);
+          document.getElementById("pay1-success")?.classList.remove("hidden");
+          // Honest receipt note: the transfer is final even when recording failed.
+          if (!result.recorded) document.getElementById("pay1-record-warn")?.classList.remove("hidden");
+          setPayStatus(payStatusText("pay1.statusPaid", "Paid — signature {signature}", { signature: result.signature }), false);
+          // Popup flow (SolhackPay.pay): notify the SSR-validated ?host= origin;
+          // the opener closes this popup on solhack:paid. Standalone links keep
+          // the confirmation screen above.
+          notifyOpenerPaid(result.signature);
+        } catch (err) {
+          setPayStatus(
+            err instanceof Error ? err.message : payStatusText("pay1.statusFailed", "Payment failed."),
+            true,
+          );
+          payOneBtn.disabled = false;
+        }
+      })();
+    });
+  }
+</script>
