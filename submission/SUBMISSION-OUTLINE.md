@@ -94,10 +94,12 @@ the numbers and discounting all of them:
 - **No real users, no customers, no revenue.** The 2 recorded charges are self-subscriptions —
   the subscriber PDA's owner equals the merchant equals the deploy keypair.
 - **The "volume" figure is not dollars.** It is `200000` base units of a **self-minted devnet
-  test mint** with 6 decimals, created by `createMint(...)` in the demo setup. Do not call it
-  USD volume.
-- **6 plans, 2 subscriptions, 0 invoice accounts** on devnet right now.
+  test mint** with 6 decimals, created by `createMint(...)` in the demo setup. The live site
+  labels it **"Settled volume (test mint)"** for exactly this reason — match that wording.
 - **Not audited.** Do not use with real funds.
+- **Known gap, stated rather than hidden:** `actions/src/routes/pay.ts` implements a Solana Pay
+  action but is not mounted in `backend/src/routes.ts`, so `/api/actions/pay` 404s. The other
+  six action routes are live and correct. Say so if asked; do not claim the pay Blink works.
 - The card-network figures shown in the pitch (~2.9% + $0.30, settle ~T+2) are **published
   industry figures**, labelled as such on screen — not measured OnchainSUB metrics.
 
