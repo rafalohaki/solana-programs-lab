@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { DEFAULT_ICON, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import {
   buildUnsignedTx,
@@ -25,7 +25,7 @@ export { optionsResponse as OPTIONS };
 export async function handlePlanGet(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const q = (k: string, fb: string): string => url.searchParams.get(k) ?? fb;
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
   return jsonResponse({
     type: "action",
     icon: DEFAULT_ICON,

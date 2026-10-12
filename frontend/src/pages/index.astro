@@ -303,7 +303,7 @@ try {
     <div class="mt-5 grid gap-3 sm:grid-cols-3">
       <div class="glass card-hover rounded-xl px-5 py-4">
         <p id="settled-volume" class="tnum font-display text-[clamp(1.5rem,7vw,2rem)] leading-10 font-semibold tracking-tight text-white"><span class="skeleton inline-block h-7 w-32 rounded-lg">&nbsp;</span></p>
-        <p class="eyebrow mt-1 text-white/50"><span data-i18n="proofs.volumeLabel">Settled volume (USD)</span></p>
+        <p class="eyebrow mt-1 text-white/50"><span data-i18n="proofs.volumeLabel">Settled volume (test mint)</span></p>
         <p class="hairline mt-2 pt-2 font-mono text-[11px] text-white/50"><span data-i18n="proofs.volumeHint">recorded charges · live</span><span id="settled-count"></span></p>
       </div>
       <div class="glass card-hover rounded-xl px-5 py-4">
@@ -318,7 +318,7 @@ try {
       </div>
     </div>
     <p class="mt-2 font-mono text-[11px] text-white/50">
-      <span data-i18n="proofs.volumeNote">Sums recorded charge amounts as USDC base units (6dp). Mixed mints add up raw —</span>
+      <span data-i18n="proofs.volumeNote">Sums recorded charge amounts as 6-decimal base units. Mixed mints add up raw —</span>
       <span class="text-cyan-300/80">GET /api/stats/volume</span>
     </p>
     <ActivityFeed client:idle />

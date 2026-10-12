@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { DEFAULT_ICON, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import {
   buildUnsignedTx,
@@ -34,8 +34,9 @@ export async function handleInvoiceGet(req: Request): Promise<Response> {
   const invoiceId = url.searchParams.get("invoiceId") ?? "{invoiceId}";
   const memo = url.searchParams.get("memo") ?? "{memoHex}";
   const cluster = url.searchParams.get("cluster") ?? "devnet";
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
   return jsonResponse({
+    type: "action",
     title: "Create invoice",
     icon: DEFAULT_ICON,
     description:

@@ -53,6 +53,11 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-OnchainSUB}
       MAIL_TEST_TOKEN: ${MAIL_TEST_TOKEN:-}
+      # Public origin used to build absolute Blink action hrefs. The backend is
+      # reached via the frontend's /api/* proxy, so its own request origin is the
+      # internal service name (http://backend:3001) and must never be handed to
+      # wallets. See publicOrigin() in actions/src/config.ts.
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://solhack.rafal.si}
       RUSTFS_URL: ${RUSTFS_URL:-http://media:9000}
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-}

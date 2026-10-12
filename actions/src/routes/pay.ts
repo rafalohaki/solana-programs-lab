@@ -6,7 +6,7 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { Connection, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { DEFAULT_ICON, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import { ataForOwner, buildUnsignedTx, parseAddress } from "../solana.js";
 
@@ -71,7 +71,7 @@ function parseAmount(raw: string | null): bigint | null {
 export async function handlePayGet(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const q = (k: string, fb: string): string => url.searchParams.get(k) ?? fb;
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
   const memo = url.searchParams.get("memo");
   const description =
     memo !== null && memo.trim() !== ""

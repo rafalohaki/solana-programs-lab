@@ -1,6 +1,6 @@
 import { createApproveInstruction } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
-import { DEFAULT_ICON, chainIdFor, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, chainIdFor, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import {
   ataForOwner,
@@ -30,7 +30,7 @@ export async function handleSubscribeGet(req: Request): Promise<Response> {
   const plan = url.searchParams.get("plan") ?? "{plan}";
   const mint = url.searchParams.get("mint") ?? "{mint}";
   const cluster = url.searchParams.get("cluster") ?? "devnet";
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
 
   return jsonResponse({
     type: "action",

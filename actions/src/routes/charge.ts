@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { DEFAULT_ICON, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import {
   ataForOwner,
@@ -33,7 +33,7 @@ export async function handleChargeGet(req: Request): Promise<Response> {
   const subscriber = url.searchParams.get("subscriber") ?? "{subscriber}";
   const mint = url.searchParams.get("mint") ?? "{mint}";
   const cluster = url.searchParams.get("cluster") ?? "devnet";
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
   return jsonResponse({
     type: "action",
     icon: DEFAULT_ICON,

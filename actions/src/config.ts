@@ -57,3 +57,35 @@ export function chainIdFor(cluster: string | null): string {
 /** Shared Blink icon — swap for a hosted absolute HTTPS URL in production. */
 export const DEFAULT_ICON =
   "https://raw.githubusercontent.com/solana-developers/opos-asset/main/assets/OpOS-Solana-Logo.png";
+
+/**
+ * Public origin for absolute links returned to wallets (href / icon URLs).
+ *
+ * WHY THIS EXISTS: the backend is reached through the frontend's `/api/*`
+ * proxy (frontend/src/pages/api/[...path].ts), which fetches
+ * `${BACKEND_URL}/api...`. So at the backend, `new URL(req.url).origin` is the
+ * Docker-internal service name — `http://backend:3001` — not the origin the
+ * wallet actually called. A wallet that follows an href built from that origin
+ * would try to resolve `backend:3001` on the public internet and fail, so the
+ * multi-step Blink flow would break *after* a first response that looks
+ * perfectly correct.
+ *
+ * `PUBLIC_SITE_URL` is therefore preferred. The request-derived origin is used
+ * ONLY as a fallback when the variable is unset (local dev, direct-to-backend
+ * calls, tests), which also avoids hardcoding a production domain in source.
+ *
+ * Setting this variable has a second benefit: it removes a Host-header
+ * dependence. Deriving absolute links from the request origin lets a spoofed
+ * Host influence URLs we hand back; an explicit public origin cannot be
+ * influenced by the caller.
+ */
+export function publicOrigin(requestUrl: URL): string {
+  const configured = process.env.PUBLIC_SITE_URL?.trim();
+  if (configured !== undefined && configured.length > 0) {
+    // Tolerate a trailing slash (or several) so `${origin}${pathname}` never
+    // produces a doubled slash.
+    return configured.replace(/\/+$/, "");
+  }
+  return requestUrl.origin;
+}
+

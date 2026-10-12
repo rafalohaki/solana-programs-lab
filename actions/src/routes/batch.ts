@@ -1,5 +1,5 @@
 import { SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
-import { DEFAULT_ICON, rpcEndpointFor } from "../config.js";
+import { DEFAULT_ICON, publicOrigin, rpcEndpointFor } from "../config.js";
 import { badRequest, jsonResponse, optionsResponse } from "../cors.js";
 import {
   ataForOwner,
@@ -34,8 +34,9 @@ interface BatchItem {
 export async function handleBatchGet(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const cluster = url.searchParams.get("cluster") ?? "devnet";
-  const base = `${url.origin}${url.pathname}`;
+  const base = `${publicOrigin(url)}${url.pathname}`;
   return jsonResponse({
+    type: "action",
     title: "Batch-charge invoices",
     icon: DEFAULT_ICON,
     description: `Merchant charges up to ${MAX_ITEMS} invoices in one transaction. Body: { account, items: [{ plan, subscription, invoice, subscriberAta, mint }] }.`,
