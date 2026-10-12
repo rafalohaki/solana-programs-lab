@@ -37,3 +37,7 @@ video/public/audio/demo/vo/
 .zcode/
 .vscode/
 test-results/
+
+# Python bytecode from video/tools/*.py
+__pycache__/
+*.pyc

@@ -82,7 +82,7 @@ export const SceneProblem: React.FC = () => (
     </div>
     <div style={{ marginTop: 100, display: "flex", gap: 130 }}>
       <ProblemStat value="2.9% + 30¢" label="+ PER CHARGE, EVERY PERIOD" delay={16} />
-      <ProblemStat value="T+7" label="DAYS UNTIL SETTLEMENT" delay={22} />
+      <ProblemStat value="T+2" label="DAYS UNTIL SETTLEMENT" delay={22} />
       <ProblemStat value="100%" label="CARD-ON-FILE CUSTODY" delay={28} />
     </div>
   </AbsoluteFill>

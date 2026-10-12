@@ -8,10 +8,15 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const easeIO = t => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
 
+// Optional clip filter: CLIPS=plans,proofs captures only those, so a single
+// dirty page does not force re-capturing every clean clip.
+const want = name => !process.env.CLIPS || process.env.CLIPS.split(',').map(s=>s.trim()).includes(name);
+
 // Deterministic frame-sequence capture: scroll position is a pure function of
 // the frame index, so the encoded motion is perfectly smooth regardless of how
 // long each screenshot takes.
 async function capture(page, name, n, posFn, opts = {}) {
+  if (!want(name)) { console.log(`${name}: skipped (not in CLIPS)`); return; }
   const dir = `${OUT}/${name}`;
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
