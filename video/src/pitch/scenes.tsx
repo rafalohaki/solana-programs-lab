@@ -339,6 +339,25 @@ const TOUR = [
   { file: "examples", url: "solhack.rafal.si/examples — embeddable widget", label: "embeddable checkout widget for any site" },
 ];
 
+/**
+ * Footage source. `live-mp4/` is the full 1600x900 (16:9) capture of the live
+ * site; `live-crop/` is the older nav-cropped 1600x808 (1.98:1) variant that
+ * existed only to hide the legacy sticky-nav wordmark before the product was
+ * renamed to OnchainSUB. Both values are valid; the box aspect is derived from
+ * the clip so switching never stretches the footage.
+ */
+const FOOTAGE_DIR = "live-mp4";
+const FOOTAGE_DIMS: Record<string, { w: number; h: number }> = {
+  "live-mp4": { w: 1600, h: 900 },
+  "live-crop": { w: 1600, h: 808 },
+};
+const FOOTAGE = FOOTAGE_DIMS[FOOTAGE_DIR];
+if (!FOOTAGE) throw new Error(`unknown FOOTAGE_DIR: ${FOOTAGE_DIR}`);
+
+/** Browser-chrome content box, sized to the footage aspect (width fixed). */
+const LIVE_W = 1386;
+const LIVE_H = Math.round((LIVE_W * FOOTAGE.h) / FOOTAGE.w);
+
 /** One tour stop: chrome + live capture, faded at its own edges. */
 const TourStop: React.FC<{ file: string; url: string; duration: number }> = ({ file, url, duration }) => {
   const frame = useCurrentFrame();
@@ -348,9 +367,9 @@ const TourStop: React.FC<{ file: string; url: string; duration: number }> = ({ f
   );
   return (
     <AbsoluteFill style={{ opacity: o, justifyContent: "center", alignItems: "center", paddingTop: 84 }}>
-      <BrowserChrome url={url} width={1386} height={700} scaleFrom={1.0} scaleTo={1.045} enterAt={0}>
+      <BrowserChrome url={url} width={LIVE_W} height={LIVE_H} scaleFrom={1.0} scaleTo={1.045} enterAt={0}>
         <Video
-          src={staticFile(`live-crop/${file}.mp4`)}
+          src={staticFile(`${FOOTAGE_DIR}/${file}.mp4`)}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           muted
         />
