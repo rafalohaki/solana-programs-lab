@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "@subscriptions/actions": "file:../actions",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.4",
     "effect": "^4.0.1",
     "hono": "^4.7.0",
     "nodemailer": "^10.0.16",

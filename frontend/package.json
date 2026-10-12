@@ -12,11 +12,11 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@astrojs/node": "9",
+    "@astrojs/node": "11",
     "@astrojs/svelte": "^7.1.0",
     "@solana/spl-token": "^0.4.8",
     "@solana/web3.js": "^1.98.0",
-    "astro": "^5.13.0",
+    "astro": "^7.3.8",
     "bs58": "^6.0.0",
     "effect": "^4.0.1",
     "svelte": "^5.28.0"
