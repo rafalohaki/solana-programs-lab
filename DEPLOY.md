@@ -195,7 +195,7 @@ merchant's ed25519 over the canonical `receipt-bind` message travels in the
 separate `authSignature` field:
 
 ```text
-onchainsub receipt-bind
+iugis receipt-bind
 merchant:<merchant>
 invoice:<invoice>
 amount:<lamports>

@@ -50,7 +50,7 @@ const en: Dict = {
   "port4.noMiddleman": "NO MIDDLEMAN",
 
   // ---- /examples 3-step flow: hero, step headers, case-card params, widget state header ----
-  "port4.exEyebrow": "OnchainSUB · live examples",
+  "port4.exEyebrow": "Iugis · live examples",
   "port4.exH1": "Live checkout, real plans, 3 lines of code.",
   "port4.exLead": "Three steps, no guesswork: pick a use case, run the live checkout widget against a real plan, then ship it with the 3-line snippet. Nothing is charged until you click Subscribe yourself.",
   "port4.exStep1t": "1 · Pick a use case",
@@ -83,7 +83,7 @@ const en: Dict = {
   "port4.exStep3Lead": "These are real endpoints — curl them, or paste the snippet on any site.",
 
   // ---- /pay checkout card + 403 ----
-  "port4.paySafeCheckout": "OnchainSUB Checkout",
+  "port4.paySafeCheckout": "Iugis Checkout",
   "port4.payVerified": "Verified Merchant",
   "port4.paySubscribeA": "Subscribe — ",
   "port4.payRecurringA": "Recurring charge every ",
@@ -193,7 +193,7 @@ const pl: Dict = {
   "port4.mechGate2V": "403 na obcych domenach",
   "port4.liveHint": "Bez depozytu. Środki zostają w portfelu do dnia płatności.",
 
-  "port4.paySafeCheckout": "OnchainSUB Checkout",
+  "port4.paySafeCheckout": "Iugis Checkout",
   "port4.payVerified": "Zweryfikowany Merchant",
   "port4.paySubscribeA": "Subskrypcja — ",
   "port4.payRecurringA": "Cykliczny pobór co ",
@@ -208,7 +208,7 @@ const pl: Dict = {
   "port4.noMiddleman": "BEZ POŚREDNIKÓW",
 
   // ---- /examples: przepływ 3-krokowy (hero, nagłówki kroków, karty CASE, stan widgetu) ----
-  "port4.exEyebrow": "OnchainSUB · żywe przykłady",
+  "port4.exEyebrow": "Iugis · żywe przykłady",
   "port4.exH1": "Żywy checkout, prawdziwe plany, 3 linijki kodu.",
   "port4.exLead": "Trzy kroki, zero zgadywania: wybierz przypadek użycia, przetestuj żywy widget checkoutu na prawdziwym planie, a potem wdróż go za pomocą 3 linijek kodu. Nic nie zostanie pobrane, dopóki osobiście nie klikniesz Subscribe.",
   "port4.exStep1t": "1 · Wybierz przypadek użycia",

@@ -16,7 +16,7 @@ import { base58Decode } from "./widget.js";
 //   headers: x-merchant, x-timestamp, x-signature (base58 ed25519 by merchant),
 //   x-body-sha256 (hex sha256 of the exact bytes)
 //   canonical message v2 (body-bound — v1 without the hash is retired):
-//     onchainsub media-put-v2\nmerchant:<m>\nkey:<k>\ntype:<t>\nsha256:<hex>\nts:<ts>
+//     iugis media-put-v2\nmerchant:<m>\nkey:<k>\ntype:<t>\nsha256:<hex>\nts:<ts>
 //
 // The pipeline is Effect (matching src/schema.ts conventions): Schema v4
 // gates first, then a tagged-error Effect program for auth + SigV4 + stream.
@@ -157,7 +157,7 @@ export function mediaStatus(): { enabled: boolean; bucket: string; maxBytes: num
 }
 
 function canonicalMediaMessageV2(merchant: string, key: string, contentType: string, bodySha256Hex: string, timestamp: string): string {
-  return `onchainsub media-put-v2\nmerchant:${merchant}\nkey:${key}\ntype:${contentType}\nsha256:${bodySha256Hex}\nts:${timestamp}`;
+  return `iugis media-put-v2\nmerchant:${merchant}\nkey:${key}\ntype:${contentType}\nsha256:${bodySha256Hex}\nts:${timestamp}`;
 }
 
 /** Domain check + ed25519 auth, shared by the Effect pipeline. Every failed

@@ -331,8 +331,8 @@ export const Close: React.FC = () => {
           </svg>
         </div>
         <span style={{ fontFamily: GROTESK, fontSize: 122, fontWeight: 700, color: C.ink, letterSpacing: "-0.045em" }}>
-          Onchain
-          <span style={{ color: C.mint }}>SUB</span>
+          Iu
+          <span style={{ color: C.mint }}>gis</span>
         </span>
       </div>
 

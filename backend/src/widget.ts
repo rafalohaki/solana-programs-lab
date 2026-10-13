@@ -222,7 +222,7 @@ async function readPlanMerchant(plan: string): Promise<PlanOwner | PlanError> {
  * for tests; the exact layout is documented in backend/README.md.
  */
 export function widgetBindMessage(merchant: string, domain: string, plan: string, timestamp: number): string {
-  return `onchainsub widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
+  return `iugis widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
 }
 
 /**

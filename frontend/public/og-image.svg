@@ -22,7 +22,7 @@
     <path d="M64 20 L100 48 L64 76 L28 48 Z" fill="url(#g)"/>
     <path d="M28 64 L64 92 L100 64 L100 76 L64 104 L28 76 Z" fill="url(#g)" opacity="0.65"/>
   </g>
-  <text x="256" y="300" font-family="'Space Grotesk',sans-serif" font-size="64" font-weight="700" fill="#e1e1f0" letter-spacing="-1">OnchainSUB</text>
+  <text x="256" y="300" font-family="'Space Grotesk',sans-serif" font-size="64" font-weight="700" fill="#e1e1f0" letter-spacing="-1">Iugis</text>
   <text x="258" y="348" font-family="'JetBrains Mono',monospace" font-size="26" fill="#cec2d8" letter-spacing="6">ON-CHAIN SUBSCRIPTIONS</text>
   <rect x="96" y="392" width="360" height="4" rx="2" fill="url(#g)"/>
 </svg>

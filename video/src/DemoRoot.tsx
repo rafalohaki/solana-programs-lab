@@ -9,7 +9,7 @@ import { TOTAL_FRAMES } from "./demo/timeline.generated";
  */
 export const DemoRoot: React.FC = () => (
   <Composition
-    id="OnchainSUBDemo"
+    id="IugisDemo"
     component={DemoComposition}
     durationInFrames={TOTAL_FRAMES}
     fps={FPS}

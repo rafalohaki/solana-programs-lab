@@ -62,7 +62,7 @@ export async function uploadMedia(file: File): Promise<MediaUploadResult> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const bodySha256 = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
   const message = new TextEncoder().encode(
-    `onchainsub media-put-v2\nmerchant:${address}\nkey:${key}\ntype:${file.type}\nsha256:${bodySha256}\nts:${timestamp}`,
+    `iugis media-put-v2\nmerchant:${address}\nkey:${key}\ntype:${file.type}\nsha256:${bodySha256}\nts:${timestamp}`,
   );
   const signature = await signMessage(message);
 

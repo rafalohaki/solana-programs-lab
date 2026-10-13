@@ -51,7 +51,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-OnchainSUB}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Iugis}
       MAIL_TEST_TOKEN: ${MAIL_TEST_TOKEN:-}
       # Public origin used to build absolute Blink action hrefs. The backend is
       # reached via the frontend's /api/* proxy, so its own request origin is the

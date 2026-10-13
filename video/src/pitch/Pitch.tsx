@@ -1,4 +1,4 @@
-// OnchainSUB pitch video — <=2 minutes, narration-led.
+// Iugis pitch video — <=2 minutes, narration-led.
 //
 // Scene durations are derived from the measured narration clip lengths plus a
 // deliberate beat for the closing card, so the voice never gets cut off and the
@@ -22,7 +22,7 @@ import {
 const TEXT: Record<string, string> = {
   s1: "Subscriptions on-chain usually mean one of two bad options: lock your money in escrow, or hand a contract an unlimited allowance.",
   s2: "Card rails charge about 2.9% plus 30 cents on every single charge, settle in about two days, and keep your card on file. Crypto solved the transfer, but it never solved the recurring pull.",
-  s3: "OnchainSUB is a Solana program for recurring payments with zero custody. You approve a single SPL token delegate, capped at exactly one period. The program can only pull that amount once per period, and your funds stay in your wallet until charge day.",
+  s3: "Iugis is a Solana program for recurring payments with zero custody. You approve a single SPL token delegate, capped at exactly one period. The program can only pull that amount once per period, and your funds stay in your wallet until charge day.",
   s4: "A merchant creates a plan on chain: a mint, an amount, and a period. A subscriber approves the subscription account as their delegate. Each period the merchant calls charge, and the program signs for exactly the plan amount. It cannot overcharge, because charge takes no amount argument at all.",
   s5: "It is live on Solana devnet today, and the whole product is running: checkout, merchant tools, wallet actions, and an embeddable checkout widget.",
   s6: "Every plan, every subscription and every charge is a public on-chain account. You can verify the program itself, and every charge it has made, on the explorer.",
@@ -32,7 +32,7 @@ const TEXT: Record<string, string> = {
 const NARR = {
   s1: 8.41,
   s2: 13.18,
-  s3: 16.92,
+  s3: 16.05,
   s4: 18.56,
   s5: 8.94,
   s6: 10.35,

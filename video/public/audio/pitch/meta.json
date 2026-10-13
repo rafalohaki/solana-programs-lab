@@ -8,8 +8,8 @@
   "text": "Card rails charge about two point nine percent plus thirty cents on every single charge, settle in about two days, and keep your card on file. Crypto solved the transfer, but it never solved the recurring pull."
  },
  "s3": {
-  "dur": 16.917,
-  "text": "OnchainSUB is a Solana program for recurring payments with zero custody. You approve a single S P L token delegate, capped at exactly one period. The program can only pull that amount once per period, and your funds stay in your wallet until charge day."
+  "dur": 16.043,
+  "text": "Iugis is a Solana program for recurring payments with zero custody. You approve a single S P L token delegate, capped at exactly one period. The program can only pull that amount once per period, and your funds stay in your wallet until charge day."
  },
  "s4": {
   "dur": 18.56,

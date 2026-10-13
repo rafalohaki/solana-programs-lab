@@ -8,7 +8,7 @@ Register: merchant binds a domain via `POST /api/widget/sites` — the request m
 `POST /api/widget/sites` `{merchant, domain, plan, signature, timestamp}` requires an **ed25519 detached signature by the merchant keypair** over EXACTLY this UTF-8 string (backend `widgetBindMessage` in `backend/src/widget.ts`):
 
 ```
-onchainsub widget-bind
+iugis widget-bind
 merchant:<merchant>
 domain:<domain>
 plan:<plan>
@@ -28,7 +28,7 @@ import nacl from "tweetnacl";
 
 const timestamp = Date.now();
 const message =
-  `onchainsub widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
+  `iugis widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
 const signature = bs58.encode(nacl.sign.detached(new TextEncoder().encode(message), secretKey));
 // body: { merchant, domain, plan, timestamp, signature }
 ```

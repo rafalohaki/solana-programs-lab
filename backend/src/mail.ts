@@ -6,7 +6,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 // `enabled: false`, so local dev and CI never attempt a real connection.
 //
 //   SMTP_FROM   override sender address; defaults to SMTP_USER
-//   MAIL_FROM_NAME display name, default "OnchainSUB"
+//   MAIL_FROM_NAME display name, default "Iugis"
 //   MAIL_TEST_TOKEN  shared secret required by POST /api/mail/test
 //   BUSINESS_NAME    legal sender name for the compliance footer
 //     (docs/LEGAL-COMPLIANCE.md §4); defaults to MAIL_FROM_NAME.
@@ -19,7 +19,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 
 const DEFAULT_HOST = "smtp.protonmail.ch";
 const DEFAULT_PORT = 587;
-const DEFAULT_FROM_NAME = "OnchainSUB";
+const DEFAULT_FROM_NAME = "Iugis";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -149,7 +149,7 @@ function oneLine(value: string): string {
 const TRANSACTIONAL_LINE = "Transactional message about your payment \u2014 no marketing.";
 
 /** Resolve the compliance footer identity from env with safe fallbacks —
- *  BUSINESS_NAME defaults to MAIL_FROM_NAME/OnchainSUB, SUPPORT_EMAIL
+ *  BUSINESS_NAME defaults to MAIL_FROM_NAME/Iugis, SUPPORT_EMAIL
  *  falls back to SMTP_FROM then SMTP_USER; address/support lines stay empty
  *  when unconfigured so sending never breaks. */
 function footerIdentity(): { name: string; address: string; support: string } {
@@ -195,7 +195,7 @@ function receiptHtml(input: {
 }): string {
   return `<!doctype html><html><body style="margin:0;background:#11131d;font-family:Inter,Arial,sans-serif;color:#e1e1f0;padding:32px">
   <div style="max-width:560px;margin:0 auto;background:#191b25;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
-    <p style="margin:0;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#cec2d8">OnchainSUB · charge receipt</p>
+    <p style="margin:0;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#cec2d8">Iugis · charge receipt</p>
     <h1 style="margin:8px 0 16px;font-size:22px;color:#ffffff">Payment received ✓</h1>
     <p style="margin:0 0 20px;font-size:26px;font-weight:700;color:#14f195;font-family:monospace">${escapeHtml(input.amountUi)}</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -225,7 +225,7 @@ export interface ChargeReceipt {
 export async function sendChargeReceipt(input: ChargeReceipt): Promise<{ sent: boolean; error?: string }> {
   return sendMail({
     to: input.to,
-    subject: oneLine(`OnchainSUB receipt — ${input.amountUi} (${input.invoice})`),
+    subject: oneLine(`Iugis receipt — ${input.amountUi} (${input.invoice})`),
     text: [
       `Payment received: ${input.amountUi}`,
       `Invoice: ${input.invoice}`,

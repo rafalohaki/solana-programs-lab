@@ -93,7 +93,7 @@ Jako operator jesteś „service provider" w sensie DMCA 512(c) (US) i hostingie
 2. **Opłata**: 6 USD za rejestrację jednego service provider-a (karta). Odnowienie co **3 lata**
    (system wysyła przypomnienia na maila agenta — nie zgub).
 3. **Dodaj service provider** („Designate an agent"):
-   - Service Provider Name: `solhack.rafal.si` (plus alternate names: `OnchainSUB`, `solhack`);
+   - Service Provider Name: `solhack.rafal.si` (plus alternate names: `Iugis`, `solhack`);
    - Alternative Names (opcjonalne): nazwa marki;
    - **Designated Agent**: imię i nazwisko, title (np. „Operator"), adres pocztowy, e-mail
      (użyj dedykowanego: `dmca@2b2t.pl` — załóż alias w Protonie), telefon;

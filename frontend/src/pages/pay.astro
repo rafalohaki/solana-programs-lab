@@ -306,7 +306,7 @@ const programIdFull = PROGRAM_ID.toBase58();
 const programIdShort = `${programIdFull.slice(0, 6)}…${programIdFull.slice(-4)}`;
 ---
 
-<Layout title={status === 200 ? (payMode ? (payLabel !== "" ? payLabel : "One-time payment") : "Checkout") : headline} description="OnchainSUB checkout — one-time payment or domain-bound subscription with attack simulator.">
+<Layout title={status === 200 ? (payMode ? (payLabel !== "" ? payLabel : "One-time payment") : "Checkout") : headline} description="Iugis checkout — one-time payment or domain-bound subscription with attack simulator.">
   <!-- =========================================================================
        ONE-TIME MODE (?mode=pay): a plain-transfer checkout card. The server
        builds an unsigned SystemProgram.transfer / SPL transferChecked at
@@ -678,7 +678,7 @@ const programIdShort = `${programIdFull.slice(0, 6)}…${programIdFull.slice(-4)
                   )}
                   <div class="flex items-center justify-between rounded-t-xl bg-[#32343f]/20 px-2 pt-1">
                     <div class="flex items-center gap-2">
-                      <span class="font-display text-sm font-semibold text-white/90" data-i18n="port4.paySafeCheckout">OnchainSUB Checkout</span>
+                      <span class="font-display text-sm font-semibold text-white/90" data-i18n="port4.paySafeCheckout">Iugis Checkout</span>
                     </div>
                     <span class="flex items-center gap-1 rounded-full bg-[#14f195]/15 px-2.5 py-1 font-mono text-[11px] text-[#14f195]">
                       <span class="msym text-[14px]" aria-hidden="true">shield</span> <span data-i18n="port4.payVerified">Verified Merchant</span>

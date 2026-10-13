@@ -18,7 +18,7 @@ timestamp** on top of the RPC ownership check. Canonical message — sign EXACTL
 this UTF-8 string (`widgetBindMessage`):
 
 ```
-onchainsub widget-bind
+iugis widget-bind
 merchant:<merchant>
 domain:<domain>
 plan:<plan>
@@ -59,7 +59,7 @@ set — without them the module is inert and `/api/mail/status` reports
 | `SMTP_HOST` / `SMTP_PORT` | default `smtp.protonmail.ch` / `587` |
 | `SMTP_USER` / `SMTP_PASS` | mailbox + Proton SMTP **token** (not the login password) |
 | `SMTP_FROM` | sender override (default = `SMTP_USER`) |
-| `MAIL_FROM_NAME` | display name (default `OnchainSUB`) |
+| `MAIL_FROM_NAME` | display name (default `Iugis`) |
 | `MAIL_TEST_TOKEN` | shared secret required by `POST /api/mail/test` |
 | `RECEIPT_DECIMALS` | decimals used to format receipt amounts (default 6) |
 

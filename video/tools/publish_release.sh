@@ -18,10 +18,10 @@
 set -euo pipefail
 
 REPO="rafalohaki/solana-programs-lab"
-TAG="${1:-submission-v1}"
+TAG="${1:-iugis-v1}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PITCH="$HERE/video/out/onchain-sub-pitch.mp4"
-DEMO="$HERE/video/out/onchain-sub-demo.mp4"
+PITCH="$HERE/video/out/iugis-pitch.mp4"
+DEMO="$HERE/video/out/iugis-demo.mp4"
 
 TOKEN="$(python3 -c "
 import re
@@ -65,7 +65,7 @@ if [ -n "$existing" ]; then
   RID="$existing"
 else
   RID=$(api -X POST "https://api.github.com/repos/$REPO/releases" \
-    -d "{\"tag_name\":\"$TAG\",\"name\":\"OnchainSUB — submission videos\",\"body\":\"Demo and pitch videos for the OnchainSUB Colosseum submission.\\n\\nBoth are H.264/AAC MP4s; they stream with byte-range support, so they play inline in a <video> element rather than downloading.\\n\\nBuilt on Solana devnet with demo data only. No mainnet, no paying customers, no revenue.\",\"draft\":false,\"prerelease\":false}" \
+    -d "{\"tag_name\":\"$TAG\",\"name\":\"Iugis — submission videos\",\"body\":\"Demo and pitch videos for the Iugis Colosseum submission.\\n\\nBoth are H.264/AAC MP4s; they stream with byte-range support, so they play inline in a <video> element rather than downloading.\\n\\nBuilt on Solana devnet with demo data only. No mainnet, no paying customers, no revenue.\",\"draft\":false,\"prerelease\":false}" \
     | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
   echo "created release id=$RID"
 fi
@@ -106,8 +106,8 @@ else:
 "
 }
 
-upload "$PITCH" "onchain-sub-pitch.mp4"
-upload "$DEMO"  "onchain-sub-demo.mp4"
+upload "$PITCH" "iugis-pitch.mp4"
+upload "$DEMO"  "iugis-demo.mp4"
 
 echo
 echo "=== release page ==="

@@ -1,4 +1,4 @@
-// Brand system for the OnchainSUB pitch video.
+// Brand system for the Iugis pitch video.
 // Deliberately colocated with ./scenes so the concurrently-built demo
 // composition can import ../kit without these files ever changing under it.
 import React from "react";
@@ -31,7 +31,7 @@ export const GradText: React.FC<{ children: React.ReactNode; style?: React.CSSPr
 );
 
 /**
- * OnchainSUB mark: a recurring-cycle diamond ring around a solid core, the
+ * Iugis mark: a recurring-cycle diamond ring around a solid core, the
  * motif the product already uses, with the brand gradient on a 135deg diagonal.
  */
 export const LogoMark: React.FC<{ size?: number; spin?: number; glow?: number }> = ({
@@ -78,7 +78,7 @@ export const LogoMark: React.FC<{ size?: number; spin?: number; glow?: number }>
   );
 };
 
-/** OnchainSUB wordmark lockup. */
+/** Iugis wordmark lockup. */
 export const Wordmark: React.FC<{ size?: number; delay?: number; mark?: boolean }> = ({
   size = 76,
   delay = 0,
@@ -107,8 +107,8 @@ export const Wordmark: React.FC<{ size?: number; delay?: number; mark?: boolean 
           color: "#e1e1f0",
         }}
       >
-        Onchain
-        <GradText>SUB</GradText>
+        Iu
+        <GradText>gis</GradText>
       </span>
     </div>
   );
@@ -167,7 +167,7 @@ export const Stage: React.FC<{
               color: "rgba(225,225,240,0.92)",
             }}
           >
-            Onchain<GradText>SUB</GradText>
+            Iu<GradText>gis</GradText>
           </span>
         </div>
         {chapter ? (

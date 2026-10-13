@@ -59,7 +59,7 @@ const en = {
   "how.3c": ".",
 
   "arch.eyebrow": "Zero Custody · SPL Delegate Engine",
-  "arch.title": "How the OnchainSUB architecture works",
+  "arch.title": "How the Iugis architecture works",
   "arch.lead":
     "Built on the native delegation mechanism of the Solana token program — no funds are ever frozen in a vault.",
   "arch.step1eyebrow": "STEP 01",
@@ -151,7 +151,7 @@ const en = {
   "nf.eyebrow": "http 404 · not found",
   "nf.title": "Page not found",
   "nf.lead":
-    "This address does not exist on OnchainSUB. If you followed a Blink or Action link, the plan behind it may be gone — check the URL or browse the live plans.",
+    "This address does not exist on Iugis. If you followed a Blink or Action link, the plan behind it may be gone — check the URL or browse the live plans.",
   "nf.backPlans": "Browse live plans",
   "nf.backBlinks": "Open the Blink builder",
 };
@@ -209,7 +209,7 @@ const pl = {
   "how.3c": ".",
 
   "arch.eyebrow": "Zero Custody · Silnik Delegacji SPL",
-  "arch.title": "Jak działa architektura OnchainSUB?",
+  "arch.title": "Jak działa architektura Iugis?",
   "arch.lead":
     "Proces oparty na natywnym mechanizmie delegacji Solana token program — żadne środki nie są zamrażane w skarbcu.",
   "arch.step1eyebrow": "KROK 01",
@@ -300,7 +300,7 @@ const pl = {
   "nf.eyebrow": "http 404 · nie znaleziono",
   "nf.title": "Nie znaleziono strony",
   "nf.lead":
-    "Ten adres nie istnieje w OnchainSUB. Jeśli trafiłeś tu z linku Blink lub Akcji, plan mógł zniknąć — sprawdź URL albo przejrzyj aktywne plany.",
+    "Ten adres nie istnieje w Iugis. Jeśli trafiłeś tu z linku Blink lub Akcji, plan mógł zniknąć — sprawdź URL albo przejrzyj aktywne plany.",
   "nf.backPlans": "Przeglądaj aktywne plany",
   "nf.backBlinks": "Otwórz kreator Blinków",
 };

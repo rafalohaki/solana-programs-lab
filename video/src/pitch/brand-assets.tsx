@@ -132,7 +132,7 @@ export const BrandCard: React.FC = () => (
           lineHeight: 1,
         }}
       >
-        OnchainSUB
+        Iugis
       </GradText>
       <div
         style={{

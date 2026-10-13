@@ -70,7 +70,7 @@
 
   /** Mirror of backend widgetBindMessage — the exact string the server verifies. */
   function widgetBindMessage(merchant: string, domain: string, plan: string, timestamp: number): string {
-    return `onchainsub widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
+    return `iugis widget-bind\nmerchant:${merchant}\ndomain:${domain}\nplan:${plan}\nts:${timestamp}`;
   }
 
   // Live preview of the canonical bind message built from REAL inputs

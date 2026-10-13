@@ -58,7 +58,22 @@ BRAND_RE = re.compile(r"[a-z]{0,6}ptionsso(?P<rest>[l1i][a-z0-9]*)?")
 # is not mistaken for the brand either.
 GENERIC_SUFFIXES = ("ana",)
 
-NEW_BRAND_RE = re.compile(r"onchainsub")
+# The RETIRED brand. After the rename to Iugis it is FORBIDDEN, exactly like
+# the older legacy name — so it is a HIT, not an ignorable string. Normalized
+# alnum form is `onchainsub`; measured OCR confusions are o/0 and a b/h tail.
+#
+# Matched on the RAW line, not the alnum-stripped one, and with a trailing word
+# boundary. Reason, caught by the self-test: stripping non-alnum turns the
+# legitimate phrase "on-chain subscriptions" into `onchainsubscriptions`, which
+# a boundary-free pattern reads as the brand. The boundary keeps "OnchainSUB"
+# (its own element, and when it abuts the next element) while rejecting
+# "on-chain sub*scriptions*". OCR confusions: o/0 and a b/h tail.
+PREV_BRAND_RE = re.compile(r"[o0]nchain[\s\-_]*su[bh]\b", re.I)
+
+# The CURRENT brand, `Iugis` (Latin iugis, "continuous, unbroken"). Applied to
+# lowercased, non-alnum-stripped text. OCR reads a leading capital I as l or 1,
+# so i/l/1/| are all accepted at both vowel positions.
+NEW_BRAND_RE = re.compile(r"[il1|]ug[il1|]s")
 
 # Two OCR segmentation modes are unioned. psm 6 (block) can drop a sparse nav
 # strip on a dense 1080p frame; psm 11 (sparse text) recovers it. Unioning is
@@ -118,6 +133,10 @@ def classify_line(line: str) -> list[tuple[str, str]]:
         lo = max(0, m.start() - 14)
         hi = min(len(stripped), m.end() + 14)
         results.append((kind, f"...{stripped[lo:hi]}..."))
+    for m in PREV_BRAND_RE.finditer(line):
+        lo = max(0, m.start() - 14)
+        hi = min(len(line), m.end() + 14)
+        results.append(("HIT", f"PREV-BRAND: ...{line[lo:hi]}..."))
     return results
 
 
@@ -144,8 +163,18 @@ SELF_TEST_CASES: list[tuple[str, str]] = [
     ("My subscriptions", "none"),
     ("subscriptions that live", "none"),
     ("Plans Merchant My subscriptions Blinks Examples Explorer", "none"),
-    ("OnchainSUB Plans Merchant Blinks", "none"),
-    ("onchainsub", "none"),
+    # the RETIRED brand after the Iugis rename -> must HIT in every form
+    ("OnchainSUB Plans Merchant Blinks", "HIT"),
+    ("onchainsub", "HIT"),
+    ("OnchainSUB", "HIT"),
+    ("0nchainsub", "HIT"),      # OCR o -> 0
+    ("onchainsuh", "HIT"),      # OCR b -> h
+    # the CURRENT brand must NOT produce a legacy hit
+    ("Iugis", "none"),
+    ("Iugis Plans Merchant Blinks", "none"),
+    ("Iugis — on-chain subscriptions on Solana", "none"),
+    ("Iugis · pitch", "none"),
+    ("Iugis · live product demo · solana devnet", "none"),
 ]
 
 

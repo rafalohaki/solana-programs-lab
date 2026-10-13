@@ -1,6 +1,6 @@
-# OnchainSUB
+# Iugis
 
-**OnchainSUB** is an on-chain subscription protocol on **Solana devnet**: a merchant
+**Iugis** is an on-chain subscription protocol on **Solana devnet**: a merchant
 creates a plan, a subscriber approves the subscription PDA as an SPL-Token
 delegate, and the protocol charges the subscriber per billing period.
 

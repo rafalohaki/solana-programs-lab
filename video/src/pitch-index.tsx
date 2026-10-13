@@ -1,4 +1,4 @@
-// Second Remotion entry point: the OnchainSUB pitch video (<=2 min).
+// Second Remotion entry point: the Iugis pitch video (<=2 min).
 // Kept separate from src/index.ts so the demo composition stays untouched.
 import { loadFont as loadGrotesk } from "@remotion/google-fonts/SpaceGrotesk";
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
@@ -11,7 +11,7 @@ loadMono("normal", { weights: ["400", "500"], subsets: ["latin"] });
 
 export const PitchRoot: React.FC = () => (
   <Composition
-    id="OnchainSUBPitch"
+    id="IugisPitch"
     component={Pitch}
     durationInFrames={PITCH_DURATION}
     fps={PITCH_FPS}

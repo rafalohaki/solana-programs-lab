@@ -1,4 +1,4 @@
-// Pitch video scenes — "OnchainSUB" (<=2 min, narration-led).
+// Pitch video scenes — "Iugis" (<=2 min, narration-led).
 // Each scene's internal timing is anchored to its narration clip length so
 // on-screen text lands with the voice rather than near it.
 import React from "react";
@@ -58,7 +58,7 @@ export const S1Hook: React.FC<{ dur: number }> = ({ dur }) => {
   return (
     <AbsoluteFill style={{ opacity: out }}>
       <Bg />
-      <Stage chapter="OnchainSUB · pitch">
+      <Stage chapter="Iugis · pitch">
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", marginTop: -30 }}>
           <div style={{ opacity: w.opacity, transform: `translateY(${w.y}px)` }}>
             <Wordmark size={92} delay={6} />
@@ -343,7 +343,7 @@ const TOUR = [
  * Footage source. `live-mp4/` is the full 1600x900 (16:9) capture of the live
  * site; `live-crop/` is the older nav-cropped 1600x808 (1.98:1) variant that
  * existed only to hide the legacy sticky-nav wordmark before the product was
- * renamed to OnchainSUB. Both values are valid; the box aspect is derived from
+ * renamed to Iugis. Both values are valid; the box aspect is derived from
  * the clip so switching never stretches the footage.
  */
 const FOOTAGE_DIR = "live-mp4";
@@ -632,7 +632,7 @@ export const S8Close: React.FC<{ dur: number }> = ({ dur }) => {
                 display: "inline-block",
               }}
             >
-              Onchain<GradText>SUB</GradText>
+              Iu<GradText>gis</GradText>
             </span>
           </div>
           <div style={{ marginTop: 24, fontFamily: MONO, fontSize: 27, letterSpacing: "0.12em", color: C.ink }}>

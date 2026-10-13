@@ -52,7 +52,7 @@ export function planMetaMessage(
   handle: string,
   timestamp: number,
 ): string {
-  return `onchainsub plan-meta\nmerchant:${merchant}\nplan:${plan}\ntitle:${title}\ndesc:${description}\ncategory:${category}\nhandle:${handle}\nts:${timestamp}`;
+  return `iugis plan-meta\nmerchant:${merchant}\nplan:${plan}\ntitle:${title}\ndesc:${description}\ncategory:${category}\nhandle:${handle}\nts:${timestamp}`;
 }
 
 /**

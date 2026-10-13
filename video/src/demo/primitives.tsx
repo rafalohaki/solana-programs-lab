@@ -375,7 +375,7 @@ export const ChapterRail: React.FC = () => {
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
         <Mono size={16} color={C.faint} tracking="0.18em" caps>
-          OnchainSUB · live product demo · solana devnet
+          Iugis · live product demo · solana devnet
         </Mono>
         <Mono size={16} color={C.faint} tracking="0.18em">
           {String(Math.floor(frame / 30 / 60)).padStart(1, "0")}:

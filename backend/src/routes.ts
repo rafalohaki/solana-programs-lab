@@ -351,14 +351,14 @@ app.get("/api/actions/report", (c) => handleReportGet(c.req.raw));
 // message (same grammar/window as widget-bind and media-put — those two
 // contracts are untouched; this is a separate "receipt-bind" message):
 //
-//   onchainsub receipt-bind
+//   iugis receipt-bind
 //   merchant:<merchant>
 //   invoice:<invoice>
 //   ts:<ms epoch>
 //
 // and for charges the amount and tx signature are bound as well:
 //
-//   onchainsub receipt-bind
+//   iugis receipt-bind
 //   merchant:<merchant>
 //   invoice:<invoice>
 //   amount:<lamports>
@@ -385,7 +385,7 @@ const INVOICE_RE = /^[^\u0000-\u001f\u007f]{1,200}$/;
 const MAX_METADATA_BYTES = 16 * 1024;
 
 export function receiptBindMessage(merchant: string, invoice: string, timestamp: number): string {
-  return `onchainsub receipt-bind\nmerchant:${merchant}\ninvoice:${invoice}\nts:${timestamp}`;
+  return `iugis receipt-bind\nmerchant:${merchant}\ninvoice:${invoice}\nts:${timestamp}`;
 }
 
 export function receiptChargeMessage(
@@ -395,7 +395,7 @@ export function receiptChargeMessage(
   txSignature: string,
   timestamp: number,
 ): string {
-  return `onchainsub receipt-bind\nmerchant:${merchant}\ninvoice:${invoice}\namount:${amount}\nsig:${txSignature}\nts:${timestamp}`;
+  return `iugis receipt-bind\nmerchant:${merchant}\ninvoice:${invoice}\namount:${amount}\nsig:${txSignature}\nts:${timestamp}`;
 }
 
 /** Verify a detached base58 ed25519 signature made by `merchant` (same decode
@@ -769,9 +769,9 @@ app.post("/api/mail/test", async (c) => {
   if (!isEmail(body.to)) return c.json({ error: "Body field to must be a valid email address." }, 400);
   const result = await sendMail({
     to: body.to,
-    subject: "OnchainSUB — SMTP test",
-    text: "SMTP works. This is a test message from the OnchainSUB backend.",
-    html: '<p style="font-family:Inter,Arial,sans-serif;font-size:14px">SMTP works — <b style="color:#14f195">OnchainSUB</b> mail is live.</p>',
+    subject: "Iugis — SMTP test",
+    text: "SMTP works. This is a test message from the Iugis backend.",
+    html: '<p style="font-family:Inter,Arial,sans-serif;font-size:14px">SMTP works — <b style="color:#14f195">Iugis</b> mail is live.</p>',
   });
   return c.json(result, result.sent ? 200 : 502);
 });

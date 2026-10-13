@@ -1,4 +1,4 @@
-# OnchainSUB — submission field outline
+# Iugis — submission field outline
 
 Facts you can verify yourself are in the "Check it" column. Fill the fields in **your own
 words** — the outline is here so nothing is missed and no claim outruns its evidence, not so
@@ -9,7 +9,7 @@ you can paste it.
 ## 1. Project details
 
 **Project name**
-- `OnchainSUB` — matches the wordmark on the live site, the repo title, and the on-screen
+- `Iugis` — matches the wordmark on the live site, the repo title, and the on-screen
   brand in both videos.
 
 **One-line / short description**
@@ -101,7 +101,7 @@ the numbers and discounting all of them:
   action but is not mounted in `backend/src/routes.ts`, so `/api/actions/pay` 404s. The other
   six action routes are live and correct. Say so if asked; do not claim the pay Blink works.
 - The card-network figures shown in the pitch (~2.9% + $0.30, settle ~T+2) are **published
-  industry figures**, labelled as such on screen — not measured OnchainSUB metrics.
+  industry figures**, labelled as such on screen — not measured Iugis metrics.
 
 ---
 

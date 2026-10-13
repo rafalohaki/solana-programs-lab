@@ -58,8 +58,8 @@ export const ColdOpen: React.FC = () => {
           </svg>
         </div>
         <span style={{ fontFamily: GROTESK, fontSize: 118, fontWeight: 700, color: C.ink, letterSpacing: "-0.045em" }}>
-          Onchain
-          <span style={{ color: C.mint }}>SUB</span>
+          Iu
+          <span style={{ color: C.mint }}>gis</span>
         </span>
       </div>
 
@@ -166,7 +166,7 @@ export const Problem: React.FC = () => {
             <Mono size={19} color={C.faint} style={{ lineHeight: 1.5 }}>
               Industry figures, not ours.
               <br />
-              Card-network pricing; not OnchainSUB metrics.
+              Card-network pricing; not Iugis metrics.
             </Mono>
           </div>
         </div>
